@@ -64,7 +64,9 @@ public abstract class TreePathDynamicConfiguration extends AbstractDynamicConfig
     protected final String rootPath;
 
     public TreePathDynamicConfiguration(URL url) {
+        // abstract抽象父类里就是搞了一个线程池
         super(url);
+        // 去搞一个对应的root path，按照一个规则来处理zk的path
         this.rootPath = getRootPath(url);
     }
 

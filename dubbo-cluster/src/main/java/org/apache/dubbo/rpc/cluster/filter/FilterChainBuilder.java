@@ -87,6 +87,8 @@ public interface FilterChainBuilder {
 
         @Override
         public Result invoke(Invocation invocation) throws RpcException {
+            // 过滤器机制，在provider端，consumer端，都会去构建对应的filter chain
+
             Result asyncResult;
             try {
                 InvocationProfilerUtils.enterDetailProfiler(invocation, () -> "Filter " + filter.getClass().getName() + " invoke.");

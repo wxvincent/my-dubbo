@@ -476,14 +476,17 @@ class URL implements Serializable {
     }
 
     public List<URL> getBackupUrls() {
+        // 在这个backup urls列表里，先加入了他自己
         List<URL> urls = new ArrayList<>();
         urls.add(this);
+        // backups默认肯定是没有的，就是搞一个空字符串数组
         String[] backups = getParameter(RemotingConstants.BACKUP_KEY, new String[0]);
         if (backups != null && backups.length > 0) {
             for (String backup : backups) {
                 urls.add(this.setAddress(backup));
             }
         }
+        // 默认情况下，这个urls里面就是当前url他自己
         return urls;
     }
 

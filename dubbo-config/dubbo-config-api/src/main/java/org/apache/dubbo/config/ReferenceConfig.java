@@ -103,8 +103,8 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
      * <li>when the url is dubbo://224.5.6.7:1234/org.apache.dubbo.config.api.DemoService?application=dubbo-sample, then
      * the protocol is <b>DubboProtocol</b></li>
      * <p>
-     * Actually，when the {@link ExtensionLoader} init the {@link Protocol} instants,it will automatically wrap three
-     * layers, and eventually will get a <b>ProtocolSerializationWrapper</b> or <b>ProtocolFilterWrapper</b> or <b>ProtocolListenerWrapper</b>
+     * Actually，when the {@link ExtensionLoader} init the {@link Protocol} instants,it will automatically wraps two
+     * layers, and eventually will get a <b>ProtocolFilterWrapper</b> or <b>ProtocolListenerWrapper</b>
      */
     private Protocol protocolSPI;
 
@@ -255,7 +255,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             this.refresh();
         }
 
-        // init serviceMetadata
+        //init serviceMetadata
+        // 对metadata元数据进行一定的初始化以及存储，注册等一系列的操作
+        // 封装csonmer model，就是把consumer的数据，封装起来，放到对应的repository里面去
         initServiceMetadata(consumer);
 
         serviceMetadata.setServiceType(getServiceInterfaceClass());
@@ -275,8 +277,10 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
 
         serviceMetadata.getAttachments().putAll(referenceParameters);
 
+        // 主要就是构建整个代理的主入口
         ref = createProxy(referenceParameters);
 
+        // 创建完了动态代理之后，就会把这个代理设置给service metadata以及consumer model
         serviceMetadata.setTarget(ref);
         serviceMetadata.addAttribute(PROXY_CLASS_REF, ref);
 
@@ -379,7 +383,12 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
 
     @SuppressWarnings({"unchecked"})
     private T createProxy(Map<String, String> referenceParameters) {
+        // 因为我们之前看到过provider那一端有一个本地发布的概念
+        // 就是把我们的目标实现类，封装成搞一个proxy invoker，然后再通过injvm protocol发布出去
+        // 把proxy invoker封装成injvm exporter
+        // 如果说要是针对本地发布出去的provider服务实例，要在同一个jvm里进行本地调用，consumer
         if (shouldJvmRefer(referenceParameters)) {
+         // 如果说本地发布，就是这么一回事，跟我们之前看过的本地发布的代码就完全匹配上了
             createInvokerForLocal(referenceParameters);
         } else {
             urls.clear();
@@ -392,6 +401,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
                     aggregateUrlFromRegistry(referenceParameters);
                 }
             }
+            // 第一块核心源码在这里，RegistryProtocol创建了invoker
             createInvokerForRemote();
         }
 
@@ -399,6 +409,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
             logger.info("Referred dubbo service " + interfaceClass.getName());
         }
 
+        // 这些都是url的处理
         URL consumerUrl = new ServiceConfigURL(CONSUMER_PROTOCOL, referenceParameters.get(REGISTER_IP_KEY), 0,
             referenceParameters.get(INTERFACE_KEY), referenceParameters);
         consumerUrl = consumerUrl.setScopeModel(getScopeModel());
@@ -406,6 +417,7 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
         MetadataUtils.publishServiceDefinition(interfaceName, consumerUrl, getScopeModel(), getApplicationModel());
 
         // create service proxy
+        // 基于invoker创建出了动态代理
         return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
     }
 
@@ -485,12 +497,24 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void createInvokerForRemote() {
+        // 这段代码里，静态代码的角度来说，不用去动态调试他
+        // protocolSPI.refer -> invokers -> cluster.join -> invoker
+
         if (urls.size() == 1) {
             URL curUrl = urls.get(0);
+            // 会基于RegistryProtocol.refer构建出来一套invoker，还是比较复杂的
+            // migration invoker，zk registry + failover cluster
+
+            // RegistryProtocol -> 调用DubboProtocol，会觉得非常的奇怪
+            // 两个人本身都是Protocol
+            // 代码设计语义，会觉得很模糊，设计洁癖
+            // activate自动激活机制，拿到一批protocols，把每个protocol要负责的语义做一个封装
+            // 依次运行每个protocol就可以了，默认protocol，负责按照顺序依次运行各个protocol对export或者是refer的语义
             invoker = protocolSPI.refer(interfaceClass, curUrl);
             if (!UrlUtils.isRegistry(curUrl)){
                 List<Invoker<?>> invokers = new ArrayList<>();
                 invokers.add(invoker);
+                // 对invoker进行了一个深加工和处理，又拿到了一个invoker，覆盖赋值处理
                 invoker = Cluster.getCluster(scopeModel, Cluster.DEFAULT).join(new StaticDirectory(curUrl, invokers), true);
             }
         } else {
@@ -527,6 +551,9 @@ public class ReferenceConfig<T> extends ReferenceConfigBase<T> {
     }
 
     private void checkInvokerAvailable() throws IllegalStateException {
+        // dubbo invoker已经搞好了，目标provider服务实例集群，都搞好了，服务实例都是一个dubbo invoker
+        // invoker体系
+        // 就需要去检查invoker体系是否可用
         if (shouldCheck() && !invoker.isAvailable()) {
             invoker.destroy();
             throw new IllegalStateException("Failed to check the status of the service "

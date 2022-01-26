@@ -16,7 +16,14 @@
  */
 package org.apache.dubbo.registry.nacos;
 
-
+import com.alibaba.nacos.api.common.Constants;
+import com.alibaba.nacos.api.exception.NacosException;
+import com.alibaba.nacos.api.naming.listener.Event;
+import com.alibaba.nacos.api.naming.listener.EventListener;
+import com.alibaba.nacos.api.naming.listener.NamingEvent;
+import com.alibaba.nacos.api.naming.pojo.Instance;
+import com.alibaba.nacos.api.naming.pojo.ListView;
+import com.google.common.collect.Lists;
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.URLBuilder;
 import org.apache.dubbo.common.logger.Logger;
@@ -32,47 +39,12 @@ import org.apache.dubbo.registry.nacos.util.NacosInstanceManageUtil;
 import org.apache.dubbo.registry.support.FailbackRegistry;
 import org.apache.dubbo.rpc.RpcException;
 
-import com.alibaba.nacos.api.common.Constants;
-import com.alibaba.nacos.api.exception.NacosException;
-import com.alibaba.nacos.api.naming.listener.Event;
-import com.alibaba.nacos.api.naming.listener.EventListener;
-import com.alibaba.nacos.api.naming.listener.NamingEvent;
-import com.alibaba.nacos.api.naming.pojo.Instance;
-import com.alibaba.nacos.api.naming.pojo.ListView;
-import com.google.common.collect.Lists;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
-import static org.apache.dubbo.common.constants.CommonConstants.CHECK_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PATH_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PROTOCOL_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.VERSION_KEY;
-import static org.apache.dubbo.common.constants.RegistryConstants.CATEGORY_KEY;
-import static org.apache.dubbo.common.constants.RegistryConstants.CONFIGURATORS_CATEGORY;
-import static org.apache.dubbo.common.constants.RegistryConstants.CONSUMERS_CATEGORY;
-import static org.apache.dubbo.common.constants.RegistryConstants.DEFAULT_CATEGORY;
-import static org.apache.dubbo.common.constants.RegistryConstants.EMPTY_PROTOCOL;
-import static org.apache.dubbo.common.constants.RegistryConstants.ENABLE_EMPTY_PROTECTION_KEY;
-import static org.apache.dubbo.common.constants.RegistryConstants.PROVIDERS_CATEGORY;
-import static org.apache.dubbo.common.constants.RegistryConstants.ROUTERS_CATEGORY;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
+import static org.apache.dubbo.common.constants.RegistryConstants.*;
 import static org.apache.dubbo.registry.Constants.ADMIN_PROTOCOL;
 import static org.apache.dubbo.registry.nacos.NacosServiceName.NAME_SEPARATOR;
 import static org.apache.dubbo.registry.nacos.NacosServiceName.valueOf;
@@ -136,6 +108,12 @@ public class NacosRegistry extends FailbackRegistry {
 
     public NacosRegistry(URL url, NacosNamingServiceWrapper namingService) {
         super(url);
+        // NamingService，就是类似于ZookeeperClient，他其实就是代表了nacos注册中心提供出来的客户端的API
+        // 通过这套客户端API，直接就可以跟nacos服务端进行交互，在这个交互过程中，就可以实现服务注册、下线、订阅、回调通知
+        // zookeeper，他是一个通用的分布式协调系统，他不是专门服务于注册中心这块的
+        // 基于zk实现注册中心的话，主要是基于zk提供的一些功能去间接的实现，他不是直接实现的
+        // nacos，他的定位就是一个注册中心，所以他是自己直接实现了注册中心的核心功能的，我们就直接用他的功能就可以了
+        // 他底层，他的客户端也是一样的，会跟服务端之间建立网络连接，就可以通过这个网络连接发送请求执行对应的操作
         this.namingService = namingService;
     }
 
@@ -166,7 +144,10 @@ public class NacosRegistry extends FailbackRegistry {
     @Override
     public void doRegister(URL url) {
         try {
+            // 他会从url里面，url是consumer端的url，里面看到过，会封装我们的服务接口的名称的
+            // 注册，provider应该是先去执行注册的，url也可以是provider url
             String serviceName = getServiceName(url);
+            // 通过url再去创建一个Instance概念，服务实例的概念，这个服务实例，代表的应该是我们的provider服务实例
             Instance instance = createInstance(url);
             /**
              *  namingService.registerInstance with {@link org.apache.dubbo.registry.support.AbstractRegistry#registryUrl}
@@ -174,6 +155,9 @@ public class NacosRegistry extends FailbackRegistry {
              *
              * in https://github.com/apache/dubbo/issues/5978
              */
+            // 直接调用nacos的客户端的API，注册服务实例，他在底层肯定会对你的服务实例对象进行序列化
+            // 通过底层的网络协议和网络通信，把服务实例传输给你的nacos服务端就可以了
+            // TCP自定义协议，HTTP协议都是很容易就可以做到的
             namingService.registerInstance(serviceName,
                 getUrl().getGroup(Constants.DEFAULT_GROUP), instance);
         } catch (Throwable cause) {
@@ -224,6 +208,7 @@ public class NacosRegistry extends FailbackRegistry {
                  * in https://github.com/apache/dubbo/issues/5978
                  */
                 for (String serviceName : serviceNames) {
+                    // 通过调用你的nacos的NamingService.getAllInstances，获取到一批服务实例
                     List<Instance> instances = namingService.getAllInstances(serviceName,
                         getUrl().getGroup(Constants.DEFAULT_GROUP));
                     NacosInstanceManageUtil.initOrRefreshServiceInstanceList(serviceName, instances);
@@ -497,6 +482,7 @@ public class NacosRegistry extends FailbackRegistry {
     }
 
     private List<URL> toUrlWithEmpty(URL consumerURL, Collection<Instance> instances) {
+        // 这个方法是他自己实现的，并没有使用CacheableFailbackRegistry
         List<URL> urls = buildURLs(consumerURL, instances);
         // Nacos does not support configurators and routers from registry, so all notifications are of providers type.
         if (urls.size() == 0 && !getUrl().getParameter(ENABLE_EMPTY_PROTECTION_KEY, true)) {
@@ -552,7 +538,9 @@ public class NacosRegistry extends FailbackRegistry {
             //  Instances
             filterEnabledInstances(enabledInstances);
         }
+        // 在这里，也是需要把raw url转为对应的URL
         List<URL> urls = toUrlWithEmpty(url, enabledInstances);
+        // 走notify机制
         NacosRegistry.this.notify(url, listener, urls);
     }
 

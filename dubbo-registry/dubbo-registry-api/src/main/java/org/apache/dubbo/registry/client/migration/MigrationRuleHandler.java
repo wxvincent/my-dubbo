@@ -37,7 +37,9 @@ public class MigrationRuleHandler<T> {
         this.consumerURL = url;
     }
 
+    // 一旦说有一个新的迁移规则，此时把迁移规则传递进来，此时就可以做对应的迁移
     public synchronized void doMigrate(MigrationRule rule) {
+        // 之前我们都看到过，创建出来的源头invoker，ServiceDiscoveryMigrationInvoker
         if (migrationInvoker instanceof ServiceDiscoveryMigrationInvoker) {
             refreshInvoker(MigrationStep.FORCE_APPLICATION, 1.0f, rule);
             return;

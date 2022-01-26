@@ -47,6 +47,9 @@ import static org.apache.dubbo.rpc.cluster.Constants.ROUTER_KEY;
 
 /**
  * Router chain
+ * 路由链条，有一些路由的规则，通过这些路由规则的过滤，可以帮你把可以用来访问的目标服务实例invokers筛选出来
+ * 责任链模式，filter链条，invoker链条，router链条
+ *
  */
 public class RouterChain<T> {
     private static final Logger logger = LoggerFactory.getLogger(RouterChain.class);
@@ -83,7 +86,8 @@ public class RouterChain<T> {
 
         List<RouterFactory> extensionFactories = moduleModel.getExtensionLoader(RouterFactory.class)
             .getActivateExtension(url, ROUTER_KEY);
-
+        // 遍历所有的router工厂，每个router工厂都获取到一个router，构建出一个router list
+        // java8的语法糖在dubbo里有大量的运用
         List<Router> routers = extensionFactories.stream()
             .map(factory -> factory.getRouter(url))
             .sorted(Router::compareTo)

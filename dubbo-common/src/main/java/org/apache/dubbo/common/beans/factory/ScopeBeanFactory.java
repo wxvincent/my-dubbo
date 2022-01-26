@@ -39,14 +39,23 @@ import java.util.stream.Collectors;
 
 /**
  * A bean factory for internal sharing.
+ *
+ * 他是dubbo框架自己内部实现的一个bean工厂，bean工厂是管理的这些bean是用于在dubbo框架内部进行共享的
+ * 非常值得我们下一讲，深入的来讲解一下
+ *
+ * model组件体系、结合实际使用案例的SPI扩展机制的实现、dubbo内部的bean容器
+ *
  */
 public class ScopeBeanFactory {
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(ScopeBeanFactory.class);
 
     private final ScopeBeanFactory parent;
+    // extension扩展实例的获取组件，有了这个东西，就有了对SPI机制使用的权限
     private ExtensionAccessor extensionAccessor;
+    // extension实例后处理器
     private List<ExtensionPostProcessor> extensionPostProcessors;
+    // 每一个class都有一个AtomicInteger作为一个计数器
     private Map<Class, AtomicInteger> beanNameIdCounterMap = new ConcurrentHashMap<>();
     private List<BeanInfo> registeredBeanInfos = new CopyOnWriteArrayList<>();
     private InstantiationStrategy instantiationStrategy;
@@ -71,10 +80,13 @@ public class ScopeBeanFactory {
         }
     }
 
+    // 你是bean管理的容器
     public <T> T registerBean(Class<T> bean) throws ScopeBeanException {
+        // 默认来说name可以是null
         return this.getOrRegisterBean(null, bean);
     }
 
+    // name也是可以自己设置的
     public <T> T registerBean(String name, Class<T> clazz) throws ScopeBeanException {
         return getOrRegisterBean(name, clazz);
     }
@@ -86,10 +98,12 @@ public class ScopeBeanFactory {
             throw new ScopeBeanException("already exists bean with same name and type, name=" + name + ", type=" + clazz.getName());
         }
         try {
+            // 直接就用你的实现类的class，初始化了一个实例对象
             instance = instantiationStrategy.instantiate(clazz);
         } catch (Throwable e) {
             throw new ScopeBeanException("create bean instance failed, type=" + clazz.getName(), e);
         }
+        // 实例化一个bean是很简单的
         registerBean(name, instance);
         return instance;
     }
@@ -204,6 +218,8 @@ public class ScopeBeanFactory {
         }
         List<BeanInfo> candidates = null;
         BeanInfo firstCandidate = null;
+
+        // type就是属于你的bean的class类型
         for (BeanInfo beanInfo : registeredBeanInfos) {
             // if required bean type is same class/superclass/interface of the registered bean
             if (type.isAssignableFrom(beanInfo.instance.getClass())) {
@@ -261,6 +277,7 @@ public class ScopeBeanFactory {
     }
 
     static class BeanInfo {
+        // bean名称和一个bean实例
         private String name;
         private Object instance;
 

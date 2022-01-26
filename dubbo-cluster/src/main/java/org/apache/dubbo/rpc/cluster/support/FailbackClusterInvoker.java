@@ -46,6 +46,8 @@ import static org.apache.dubbo.rpc.cluster.Constants.FAIL_BACK_TASKS_KEY;
  * When fails, record failure requests and schedule for retry on a regular interval.
  * Especially useful for services of notification.
  *
+ * failback，如果调用失败了，会把这次调用记录存储起来，后续根据一定的策略，再去隔一段时间进行重试
+ *
  * <a href="http://en.wikipedia.org/wiki/Failback">Failback</a>
  */
 public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
@@ -58,6 +60,7 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
 
     private final int failbackTasks;
 
+    // 多线程的double check检查机制，一般是会配合volatile关键字去使用的
     private volatile Timer failTimer;
 
     public FailbackClusterInvoker(Directory<T> directory) {
@@ -76,9 +79,11 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
     }
 
     private void addFailed(LoadBalance loadbalance, Invocation invocation, List<Invoker<T>> invokers, Invoker<T> lastInvoker, URL consumerUrl) {
+        // 为了保证多线程并发安全问题，用了一个double check
         if (failTimer == null) {
             synchronized (this) {
                 if (failTimer == null) {
+                    // 时间轮机制，timer wheel，kafka课程里，是讲过时间轮算法和机制的
                     failTimer = new HashedWheelTimer(
                         new NamedThreadFactory("failback-cluster-timer", true),
                         1,
@@ -107,6 +112,7 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
         } catch (Throwable e) {
             logger.error("Failback to invoke method " + invocation.getMethodName() + ", wait for retry in background. Ignored exception: "
                 + e.getMessage() + ", ", e);
+            // 如果不出意外，默认也是3次，走完add failed之后，就会返回一个空结果
             if (retries > 0) {
                 addFailed(loadbalance, invocation, invokers, invoker, consumerUrl);
             }
@@ -149,6 +155,7 @@ public class FailbackClusterInvoker<T> extends AbstractClusterInvoker<T> {
         @Override
         public void run(Timeout timeout) {
             try {
+                // 到了一定的间隔时间之后，他就会重新去通过select算法，选择你的一个新的invoker出来
                 Invoker<T> retryInvoker = select(loadbalance, invocation, invokers, Collections.singletonList(lastInvoker));
                 lastInvoker = retryInvoker;
                 invokeWithContextAsync(retryInvoker, invocation, consumerUrl);

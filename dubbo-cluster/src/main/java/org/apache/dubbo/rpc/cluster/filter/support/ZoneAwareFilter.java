@@ -48,6 +48,9 @@ public class ZoneAwareFilter implements ClusterFilter {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // zone aware，机房感知/机架感知，数据区域感知
+        // 在进行调用的时候，可以去感知到你的consumer在哪个机房里，目标的provider可以尽量选择同机房的provider来访问
+        // 尽可能不要跑到其他机房去
         RpcContext rpcContext = RpcContext.getClientAttachment();
         String zone = (String) rpcContext.getAttachment(REGISTRY_ZONE);
         String force = (String) rpcContext.getAttachment(REGISTRY_ZONE_FORCE);
@@ -58,6 +61,7 @@ public class ZoneAwareFilter implements ClusterFilter {
             force = detector.isZoneForcingEnabled(invocation, zone);
         }
 
+        // 下面无非就是把这些参数拿出来，绑定给你的rpc调用，往下走，这些东西就可以使用了
         if (StringUtils.isNotEmpty(zone)) {
             invocation.setAttachment(REGISTRY_ZONE, zone);
         }

@@ -41,9 +41,14 @@ public class ExecuteLimitFilter implements Filter, Filter.Listener {
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // 根据你的配置，可以针对你的类和方法，去限制同时调用的并发数量
+
         URL url = invoker.getUrl();
         String methodName = invocation.getMethodName();
+        // 就是说根据配置，去拿你到底最多可以针对你的目标类和方法发起多少并发请求
         int max = url.getMethodParameter(methodName, EXECUTES_KEY, 0);
+
+        // beginCount，会去对目标接口的访问进行计数
         if (!RpcStatus.beginCount(url, methodName, max)) {
             throw new RpcException(RpcException.LIMIT_EXCEEDED_EXCEPTION,
                     "Failed to invoke method " + invocation.getMethodName() + " in provider " +

@@ -73,9 +73,13 @@ public class DubboCodec extends ExchangeCodec {
 
     @Override
     protected Object decodeBody(Channel channel, InputStream is, byte[] header) throws IOException {
+        // 对于header[2]就是一个flag，request还是什么
         byte flag = header[2], proto = (byte) (flag & SERIALIZATION_MASK);
         // get request id.
+        // 从header里提取出来对应的request id
         long id = Bytes.bytes2long(header, 4);
+
+        // 如果说flag和FLAG_REQUEST进行位运算，0，说明他不是request，是response
         if ((flag & FLAG_REQUEST) == 0) {
             // decode response.
             Response res = new Response(id);
@@ -125,9 +129,13 @@ public class DubboCodec extends ExchangeCodec {
             return res;
         } else {
             // decode request.
+            // 如果说flag和FLAG_REQUEST进行与运算，不为0，request
             Request req = new Request(id);
+             // version这个东西是代码里面写死的，通用的
             req.setVersion(Version.getProtocolVersion());
+             // 把你的flag和FLAG_TWOWAY进行与运算，如果不为0，就说明是two way
             req.setTwoWay((flag & FLAG_TWOWAY) != 0);
+             // 一个字节，用一个字节的二进制的数据，通过各种位运算，就可以让一个字节表达出来各种各样的含义
             if ((flag & FLAG_EVENT) != 0) {
                 req.setEvent(true);
             }
@@ -199,8 +207,11 @@ public class DubboCodec extends ExchangeCodec {
         out.writeUTF(serviceName);
         out.writeUTF(inv.getAttachment(VERSION_KEY));
 
+         // 再去写方法名称
         out.writeUTF(inv.getMethodName());
+        // 再去写方法参数类型的描述
         out.writeUTF(inv.getParameterTypesDesc());
+         // 再去写一些具体的参数值
         Object[] args = inv.getArguments();
         if (args != null) {
             for (int i = 0; i < args.length; i++) {

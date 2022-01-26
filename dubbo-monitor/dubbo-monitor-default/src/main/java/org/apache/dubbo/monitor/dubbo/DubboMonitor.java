@@ -78,6 +78,7 @@ public class DubboMonitor implements Monitor {
         // The time interval for timer <b>scheduledExecutorService</b> to send data
         final long monitorInterval = monitorInvoker.getUrl().getPositiveParameter(MONITOR_SEND_DATA_INTERVAL_KEY, DEFAULT_MONITOR_SEND_DATA_INTERVAL);
         // collect timer for collecting statistics data
+        // 周期性的运转
         sendFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 // collect data

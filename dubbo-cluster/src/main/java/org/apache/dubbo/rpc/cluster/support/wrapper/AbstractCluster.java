@@ -89,6 +89,7 @@ public abstract class AbstractCluster implements Cluster {
 
         @Override
         public Result invoke(Invocation invocation) throws RpcException {
+            // 走一个filter过滤链路，去对rpc调用先走一个filter链条
             return filterInvoker.invoke(invocation);
         }
 

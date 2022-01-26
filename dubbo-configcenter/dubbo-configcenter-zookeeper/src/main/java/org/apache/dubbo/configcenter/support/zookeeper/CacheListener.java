@@ -42,6 +42,7 @@ public class CacheListener implements DataListener {
     }
 
     public void addListener(String key, ConfigurationListener configurationListener) {
+        // 他这里会在客户端层面保存每个key所有的监听器，做一个监听器的缓存
         Set<ConfigurationListener> listeners = keyListeners.computeIfAbsent(key, k -> new CopyOnWriteArraySet<>());
         listeners.add(configurationListener);
     }
@@ -99,8 +100,11 @@ public class CacheListener implements DataListener {
         }
         String key = pathToKey(path);
 
+        // 就可以你的配置项的值的修改，封装为一个config changed event
         ConfigChangedEvent configChangeEvent = new ConfigChangedEvent(key, getGroup(path), (String) value, changeType);
         Set<ConfigurationListener> listeners = keyListeners.get(path);
+        // 你的一个配置项的key path，之前可能会施加多个监听器，对多个监听器做一个遍历，回调通知
+        // 就可以把你的事件去做一个处理
         if (CollectionUtils.isNotEmpty(listeners)) {
             listeners.forEach(listener -> listener.process(configChangeEvent));
         }

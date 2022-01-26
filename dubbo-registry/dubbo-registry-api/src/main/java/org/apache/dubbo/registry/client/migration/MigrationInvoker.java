@@ -84,10 +84,14 @@ public class MigrationInvoker<T> implements MigrationClusterInvoker<T> {
                             Class<T> type,
                             URL url,
                             URL consumerUrl) {
+         // 这个一开始是null
         this.invoker = invoker;
+         // 这个一开始也是null
         this.serviceDiscoveryInvoker = serviceDiscoveryInvoker;
         this.registryProtocol = registryProtocol;
+         // 这个是我们获取出来的集群容错的策略
         this.cluster = cluster;
+         // 这个是我们获取出来的一个服务注册中心
         this.registry = registry;
         this.type = type;
         this.url = url;
@@ -240,7 +244,16 @@ public class MigrationInvoker<T> implements MigrationClusterInvoker<T> {
     @Override
     public void migrateToApplicationFirstInvoker(MigrationRule newRule) {
         CountDownLatch latch = new CountDownLatch(0);
+
+        // 这块的是比较关键的
+        // migration，迁移，两个核心的invoker，invoker，service discovery invoker
+        // 所以此时，在这里进行invoker的刷新处理，就是在给我们的migration invoker去注入下一个环节的invoker
+        // 他还把migration rule，给传入进来了
+        // 是否是说，两个invoker都搞好了之后，就会根据最新的一个迁移规则，来决定当前应该是用哪个invoker
+        // 来作为我们的migration invoker的下一级invoker
+         // 第一个interface invoker
         refreshInterfaceInvoker(latch);
+        // 第二个service discovery invoker
         refreshServiceDiscoveryInvoker(latch);
 
         // directly calculate preferred invoker, will not wait until address notify
@@ -270,6 +283,11 @@ public class MigrationInvoker<T> implements MigrationClusterInvoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
+        // 真正再执行invoker调用的时候，我们可以看一下这个migration invoker里面的逻辑
+        // 尝试理解一下，他为啥叫做migration invoker，迁移
+        // invoker和serviceDiscoveryInvoker有一个针对currentAvailableInvoker进行切换的过程
+        // 迁移，migration的名义就从这里而来
+
         if (currentAvailableInvoker != null) {
             if (step == APPLICATION_FIRST) {
                 // call ratio calculation based on random value
@@ -425,6 +443,7 @@ public class MigrationInvoker<T> implements MigrationClusterInvoker<T> {
             if (serviceDiscoveryInvoker != null) {
                 serviceDiscoveryInvoker.destroy();
             }
+            // RegistryProtocol的getServiceDiscoveryInvoker
             serviceDiscoveryInvoker = registryProtocol.getServiceDiscoveryInvoker(cluster, registry, type, url);
         }
         setListener(serviceDiscoveryInvoker, () -> {
@@ -449,6 +468,8 @@ public class MigrationInvoker<T> implements MigrationClusterInvoker<T> {
             if (invoker != null) {
                 invoker.destroy();
             }
+            // 核心逻辑在这里，RegistryProtocol.getInvoker，把MockClusterWrapper
+            // SPI去获取的，此时因为需要基于Wrapper进行包装，所以说他是有一层包装的逻辑再里面的
             invoker = registryProtocol.getInvoker(cluster, registry, type, url);
         }
         setListener(invoker, () -> {

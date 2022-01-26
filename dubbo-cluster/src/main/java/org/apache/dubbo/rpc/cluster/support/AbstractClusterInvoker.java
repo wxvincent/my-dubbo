@@ -56,6 +56,13 @@ import static org.apache.dubbo.rpc.cluster.Constants.DEFAULT_CLUSTER_STICKY;
 
 /**
  * AbstractClusterInvoker
+ *
+ * invoker这块的设计，我觉得是dubbo里非常漂亮的一个实现
+ * 如果你要是对一个目标服务实例进行rpc调用，invoke，负责调用的这个组件，就可以叫做invoker
+ * 设计模式，抽出来一个抽象的父类，把一些基础的方法和骨架，都放在了父类里面
+ * 定义了一个抽象方法，各个子类具体实现自己的逻辑就可以了，复用的代码逻辑都是走父类就好了
+ * 模板方法设计模式
+ *
  */
 public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
 
@@ -153,15 +160,27 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
     protected Invoker<T> select(LoadBalance loadbalance, Invocation invocation,
                                 List<Invoker<T>> invokers, List<Invoker<T>> selected) throws RpcException {
 
+        // invokers不能为空，为空的话就直接返回了
         if (CollectionUtils.isEmpty(invokers)) {
             return null;
         }
+
+        // 调用的方法名称的处理，rpc调用如果是null的话，method方法名就是一个空字符串
+        // 否则的话，就是rpc调用里的方法名称
         String methodName = invocation == null ? StringUtils.EMPTY_STRING : invocation.getMethodName();
 
+        // 可能你在看源码的时候，你看不懂，仔细的代码逻辑可以看懂吧
+        // 一般来说，根据代码逻辑进行一个大致的推测就知道，这个所谓的sticky invoker应该是在某些特殊情况下
+        // 会生效，会基于这个sticky invoker发起rpc调用
+        // 但是通常我们分析源码，并没有必要说对特殊的代码过多的关注
+
+        // invokers（服务实例集群地址），先获取第一个，拿到他的url，再去获取到对应的sticky
+        // 不知道这个sticky是什么含义，默认的话就是一个false
         boolean sticky = invokers.get(0).getUrl()
             .getMethodParameter(methodName, CLUSTER_STICKY_KEY, DEFAULT_CLUSTER_STICKY);
 
         //ignore overloaded method
+        // 对sticky invoker做了一个处理
         if (stickyInvoker != null && !invokers.contains(stickyInvoker)) {
             stickyInvoker = null;
         }
@@ -172,8 +191,10 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
             }
         }
 
+        // 就会正式的基于loadbalance去进行负载均衡，选择一个invoker出来
         Invoker<T> invoker = doSelect(loadbalance, invocation, invokers, selected);
 
+        // 如果说选择出一个invoker之后，sticky是true，此时还要把这个sticky invoker设置为选择出来的invoker
         if (sticky) {
             stickyInvoker = invoker;
         }
@@ -187,11 +208,13 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
         if (CollectionUtils.isEmpty(invokers)) {
             return null;
         }
+        // 如果invokers的数量就1个，目标provider服务实例就一个，invokers的数量肯定也是就1个，直接返回invokers里的第一个就可以了
         if (invokers.size() == 1) {
             Invoker<T> tInvoker = invokers.get(0);
             checkShouldInvalidateInvoker(tInvoker);
             return tInvoker;
         }
+        // 基于负载均衡的策略和算法，选择出一个invoker
         Invoker<T> invoker = loadbalance.select(invokers, getUrl(), invocation);
 
         //If the `invoker` is in the  `selected` or invoker is unavailable && availablecheck is true, reselect.
@@ -208,6 +231,7 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
                     invoker = rInvoker;
                 } else {
                     //Check the index of current selected invoker, if it's not the last one, choose the one at index+1.
+                    // 如果说选来选去都是空，对当前invoker直接选择他的下一个invoker就可以了
                     int index = invokers.indexOf(invoker);
                     try {
                         //Avoid collision
@@ -280,15 +304,20 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
 
         // 2. Use loadBalance to select one (all the reselectInvokers are available)
         if (!reselectInvokers.isEmpty()) {
+            // 在这里针对新的invokers列表，再次用负载均衡的算法，选择一个invoker
             return loadbalance.select(reselectInvokers, getUrl(), invocation);
         }
 
         // 3. reselectInvokers is empty. Unable to find at least one available invoker.
         //    Re-check all the selected invokers. If some in the selected list are available, add to reselectInvokers.
         if (selected != null) {
+            // 如果上面的那个reselect列表是空的，选无可选，只能从选择过的invokers里面
+            // 矬子里面拔将军
             for (Invoker<T> invoker : selected) {
+                // 如果说之前选择过的invoker此时是可用的
                 if ((invoker.isAvailable()) // available first
                     && !reselectInvokers.contains(invoker)) {
+                    // 再次把选择过的invoker但是此时可用了，放到reselect列表里去
                     reselectInvokers.add(invoker);
                 }
             }
@@ -297,6 +326,7 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
         // 4. If reselectInvokers is not empty after re-check.
         //    Pick an available invoker using loadBalance policy
         if (!reselectInvokers.isEmpty()) {
+            // 要是把选择过的invoker再次筛一遍筛出可用的，放到reselect里面去，有，再次进行负载均衡
             return loadbalance.select(reselectInvokers, getUrl(), invocation);
         }
 
@@ -344,6 +374,7 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
     }
 
     protected void checkWhetherDestroyed() {
+        // 当前服务实例是否说被销毁了，如果是的话，就直接抛异常
         if (destroyed.get()) {
             throw new RpcException("Rpc cluster invoker for " + getInterface() + " on consumer " + NetUtils.getLocalHost()
                 + " use dubbo version " + Version.getVersion()
@@ -357,6 +388,7 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
     }
 
     protected void checkInvokers(List<Invoker<T>> invokers, Invocation invocation) {
+        // 看一下invokers是否为空，如果是空的话，立刻抛错
         if (CollectionUtils.isEmpty(invokers)) {
             throw new RpcException(RpcException.NO_INVOKER_AVAILABLE_AFTER_FILTER, "Failed to invoke the method "
                 + invocation.getMethodName() + " in the service " + getInterface().getName()
@@ -400,6 +432,7 @@ public abstract class AbstractClusterInvoker<T> implements ClusterInvoker<T> {
         return result;
     }
 
+    // 抽象方法，留着给子类来实现的
     protected abstract Result doInvoke(Invocation invocation, List<Invoker<T>> invokers,
                                        LoadBalance loadbalance) throws RpcException;
 

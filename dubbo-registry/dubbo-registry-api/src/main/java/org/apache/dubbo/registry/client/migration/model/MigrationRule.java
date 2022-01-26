@@ -74,6 +74,7 @@ import static org.apache.dubbo.registry.client.migration.MigrationRuleHandler.DU
  *    step: FORCE_INTERFACE
  */
 public class MigrationRule {
+    // 默认规则，静态变量，类初始化，就可以把他搞出来
     public static final MigrationRule INIT = new MigrationRule();
 
     private String key;

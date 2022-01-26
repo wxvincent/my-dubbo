@@ -47,6 +47,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory, ScopeM
     @Override
     public void setApplicationModel(ApplicationModel applicationModel) {
         this.applicationModel = applicationModel;
+        // 通过model组件拿到dubbu自己管理的bean容器，从bean容器里拿到对应的RegistryManager bean实例
         this.registryManager = applicationModel.getBeanFactory().getBean(RegistryManager.class);
     }
 

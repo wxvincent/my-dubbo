@@ -30,13 +30,16 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ServiceMetadata extends BaseServiceMetadata {
 
+    // 默认的服务分组
     private String defaultGroup;
+    // 服务接口类型，Class对象，clazz
     private Class<?> serviceType;
-
+    // 目标可以用于调用的实现接口的实现类的实例对象
     private Object target;
 
     /**
      * will be transferred to remote side
+     * 里面可以封装和放置一大堆的对象和对应的属性配置
      */
     private final Map<String, Object> attachments = new ConcurrentHashMap<>();
     /**

@@ -27,10 +27,15 @@ import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_VERSION;
 public class BaseServiceMetadata {
     public static final char COLON_SEPARATOR = ':';
 
+    // service key，代表了我们的服务的关键名称
     protected String serviceKey;
+    // 服务的接口名称，也是我们的服务非常重要的一个信息
     protected String serviceInterfaceName;
+    // 服务版本号
     protected String version;
+    // 服务是可以分组的，我们后面会陆续讲解dubbo的各种高阶特性，服务是可以分成一组一组的
     protected volatile String group;
+    // model
     private ServiceModel serviceModel;
 
     public static String buildServiceKey(String path, String group, String version) {

@@ -88,21 +88,36 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
 
     @Override
     public Result invoke(Invocation invocation) throws RpcException {
+        // mock，模拟调用
+        // 如果说你的目标provider服务实例，突然故障了，这个时候consumer端可以进行降级调用
+        // 本地进行mock，consumer端就不再发起远程调用了，直接在本地搞一个mock就可以了
+        // 本地调用一个mock方法，在mock方法里构造写死一个结果，返回就完了
+
         Result result;
 
         String value = getUrl().getMethodParameter(invocation.getMethodName(), MOCK_KEY, Boolean.FALSE.toString()).trim();
         if (value.length() == 0 || "false".equalsIgnoreCase(value)) {
             //no mock
+            // 直接发起正常的调用
+            // 每一层的invoker，都会去负责自己的事情
+            // 源码为何要这么设计，这么设计有什么好处？没有问题
+            // invoker这块的设计，其实很有亮点的，严格的责任链模式，运用了责任链模式的思想
+            // invoker->invoker->invoker->invoker
+            // 在发起rpc调用的时候，肯定会涉及到很多的机制，比如降级调用机制（mock），集群容错机制，负载均衡机制，rpc调用
+            // 如果说你就设计一个invoker，那么他里面的代码就会很多很多
             result = this.invoker.invoke(invocation);
         } else if (value.startsWith(FORCE_KEY)) {
             if (logger.isWarnEnabled()) {
                 logger.warn("force-mock: " + invocation.getMethodName() + " force-mock enabled , url : " + getUrl());
             }
             //force:direct mock
+            // 就是说你对这个服务实例的调用，使用了force mock，强制性进行mock
+            // 他根本就不会发起真正的rpc调用
             result = doMockInvoke(invocation, null);
         } else {
             //fail-mock
             try {
+                // 他也是会先进行正常的rpc调用
                 result = this.invoker.invoke(invocation);
 
                 //fix:#4585
@@ -111,6 +126,7 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
                     if(rpcException.isBiz()){
                         throw  rpcException;
                     }else {
+                        // 如果说rpc有异常，此时在这里会直接进行mock调用
                         result = doMockInvoke(invocation, rpcException);
                     }
                 }
@@ -123,6 +139,7 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
                 if (logger.isWarnEnabled()) {
                     logger.warn("fail-mock: " + invocation.getMethodName() + " fail-mock enabled , url : " + getUrl(), e);
                 }
+                // rpc调用过程中直接抛异常了
                 result = doMockInvoke(invocation, e);
             }
         }
@@ -136,11 +153,13 @@ public class MockClusterInvoker<T> implements ClusterInvoker<T> {
 
         List<Invoker<T>> mockInvokers = selectMockInvoker(invocation);
         if (CollectionUtils.isEmpty(mockInvokers)) {
+            // 这个相对来说还是比较靠谱一些的
             mockInvoker = (Invoker<T>) new MockInvoker(getUrl(), directory.getInterface());
         } else {
             mockInvoker = mockInvokers.get(0);
         }
         try {
+            // 两种情况：要不然是构造出来一个mock值，要不然就是执行一个mock对象的实现方法
             result = mockInvoker.invoke(invocation);
         } catch (RpcException mockException) {
             if (mockException.isBiz()) {

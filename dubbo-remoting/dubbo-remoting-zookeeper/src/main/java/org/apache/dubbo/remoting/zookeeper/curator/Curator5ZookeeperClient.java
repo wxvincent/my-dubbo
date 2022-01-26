@@ -65,6 +65,7 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
     public Curator5ZookeeperClient(URL url) {
         super(url);
         try {
+            // 对zk发起连接超时的时间默认是5s，尝试向zk发起连接，如果超过5s没连接上去，此时就超时了
             int timeout = url.getParameter(TIMEOUT_KEY, DEFAULT_CONNECTION_TIMEOUT_MS);
             int sessionExpireMs = url.getParameter(SESSION_KEY, DEFAULT_SESSION_TIMEOUT_MS);
             CuratorFrameworkFactory.Builder builder = CuratorFrameworkFactory.builder()
@@ -79,6 +80,7 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
             client = builder.build();
             client.getConnectionStateListenable().addListener(new CuratorConnectionStateListener(url));
             client.start();
+            // 阻塞住一直到跟zk成功建立连接为止
             boolean connected = client.blockUntilConnected(timeout, TimeUnit.MILLISECONDS);
             if (!connected) {
                 throw new IllegalStateException("zookeeper not connected");
@@ -111,6 +113,7 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
             deletePath(path);
             createEphemeral(path);
         } catch (Exception e) {
+            // 创建过程中，如果说跟zk有链接问题，或者是zk自己有问题，此时就会出事儿
             throw new IllegalStateException(e.getMessage(), e);
         }
     }
@@ -295,6 +298,9 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
                 nodeCache.getListenable().addListener(nodeCacheListener, executor);
             }
 
+            // 大概可以做一个推测，他肯定是说，把你的监听器施加操作，在你的内存里做一个缓存
+            // 再通过一个线程池提交异步任务，异步化的去做施加监听器的操作
+
             nodeCache.start();
         } catch (Exception e) {
             throw new IllegalStateException("Add nodeCache listener for path:" + path, e);
@@ -334,16 +340,20 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
 
         @Override
         public void nodeChanged() throws Exception {
+            // 如果说有对应的节点的值的变化，此时就会回调这里
             ChildData childData = nodeCacheMap.get(path).getCurrentData();
             String content = null;
             EventType eventType;
             if (childData == null) {
+                // 就说明出现了一个node delete删除事件
                 eventType = EventType.NodeDeleted;
             } else if (childData.getStat().getVersion() == 0) {
                 content = new String(childData.getData(), CHARSET);
+                // 就说明有一个node创建的一个事件
                 eventType = EventType.NodeCreated;
             } else {
                 content = new String(childData.getData(), CHARSET);
+                // node数据值的变化
                 eventType = EventType.NodeDataChanged;
             }
             dataListener.dataChanged(path, content, eventType);
@@ -395,6 +405,8 @@ public class Curator5ZookeeperClient extends AbstractZookeeperClient<Curator5Zoo
             this.sessionExpireMs = url.getParameter(SESSION_KEY, DEFAULT_SESSION_TIMEOUT_MS);
         }
 
+        // 跟zk的连接建立了之后，一般来说你都得关注一下跟这个zk之间的连接
+        // 如果跟zk的连接有断开，此时会回调通知你的
         @Override
         public void stateChanged(CuratorFramework client, ConnectionState state) {
             long sessionId = UNKNOWN_SESSION_ID;

@@ -46,6 +46,8 @@ public final class InternalThreadLocalMap {
         Thread thread = Thread.currentThread();
         if (thread instanceof InternalThread) {
             return fastGet((InternalThread) thread);
+             // thread local是dubbo自己实现的
+            // thread local实现原理很简单的，其实就是一个map缓存，key就是当前的thread线程，value就是thread对应的一个数据空间
         }
         return slowGet();
     }

@@ -173,12 +173,47 @@ public class DefaultApplicationDeployer extends AbstractDeployer<ApplicationMode
         }
         // Ensure that the initialization is completed when concurrent calls
         synchronized (startLock) {
+            // 这里的源码是什么意思呢，就是你的ApplicationDeployer组件，可能会被多线程并发访问
+            // 不一定说多个线程都是并发再访问你的这个initialize这个方法
+            // 肯定会有一个线程是在执行你的initialize这个方法的，此时可能有别的线程会去访问别的方法
+            // 别的线程访问别的方法，也可以用synchronized(this)加锁，必须被卡住
+            // 等待你的这个线程把initialize过程先执行完毕了再说
             if (initialized) {
                 return;
             }
             // register shutdown hook
             registerShutdownHook();
 
+            // 这些东西，其实就是deployer组件最关键的要干的事情
+
+            // 老的dubbo版本，注册中心的概念
+            // 后来随着版本的迭代和演进，出现了配置中心、元数据中心
+            // 解耦的概念
+            // dubbo的服务实例信息、配置信息、元数据信息，你都放在zk里也是可以的
+            // 如果你把一个服务实例的各种数据和信息，都存储再zk里面，各种数据和信息是严重耦合在一起的
+            // 扩展性和可用性，两个层面来分析一下，如果说你把各种数据都耦合在一起，都放zk里
+
+            // 扩展性，服务实例的数据，在一个大规模的微服务系统里面，大厂里面，服务本身可能都有上百个，几十个
+            // 服务实例可能有几百个，几千个，数据自己本身可能就很多
+            // 配置数据，可能说，不是太多，元数据，可能也不是怎么太多，扩展性，数据扩展
+            // 服务实例数据在膨胀，配置数据和元数据可能也在增加，但是线性膨胀的可能就是服务实例数据
+            // 可能就需要对注册中心去进行一个扩容，可能是更换一个系统去存储，在这个过程之中，耦合在一起的，就动数据
+            // 牵一发而动全身，这个就是所谓的多种不同门类的数据耦合在一起的痛点
+
+            // 可用性，注册数据、配置数据、元数据，把它们三个都放在一个地方，zk
+            // 此时可能会出现一个问题，万一说zk要是故障了，三种数据一起没了，可用性问题，耦合的问题在里面
+
+            // dubbo现在最新的版本的架构设计思想，不同分类的数据进行解耦，service config和reference config
+            // 两种角色分离设计的思想的时候，解耦，解耦，解耦
+            // 把三种数据，注册数据、元数据、配置数据，三大数据可以做一个分离和解耦
+            // 三大中心也做一个分离和解耦，注册中心、配置中心、元数据中心，我们就可以把三种不同门类的数据，放到不同的地方去
+
+            // 数据扩展性这块，比如说你要对服务实例数据太多了，此时要扩容或者切换存储技术，对你的另外两种数据是没有直接的影响的
+            // 可用性这块，也有一个增强，万一说zk作为注册中心突然挂了，此时配置中心假设可能是nacos，对他们来说，没有直接的影响这样子
+
+            // 启动配置中心，如果说你要是启动了外部配置中心，此时就可以从外部配置中心加载你的全局配置属性
+            // 后续你的router这一块，他们都可以通过配置中心监听他们对应的router路由配置节点
+            // 有最新的router治理规则变更，就可以配置中心推送给他们了
             startConfigCenter();
 
             loadApplicationConfigs();
@@ -214,6 +249,8 @@ public class DefaultApplicationDeployer extends AbstractDeployer<ApplicationMode
         configManager.loadConfigs();
     }
 
+    // ConfigCenter，配置中心连接apollo、nacos、zookeeper别的什么东西
+    // dynamic configuration，动态化的配置
     private void startConfigCenter() {
 
         // load application config
@@ -227,6 +264,7 @@ public class DefaultApplicationDeployer extends AbstractDeployer<ApplicationMode
         // load config centers
         configManager.loadConfigsOfTypeFromProps(ConfigCenterConfig.class);
 
+        // 如果有必要的话，直接使用注册中心作为自己的配置中心
         useRegistryAsConfigCenterIfNecessary();
 
         // check Config Center
@@ -263,12 +301,15 @@ public class DefaultApplicationDeployer extends AbstractDeployer<ApplicationMode
 
     private void startMetadataCenter() {
 
+        // 第一步，先分析一下元数据中心，他是否要用注册中心当做元数据中心
         useRegistryAsMetadataCenterIfNecessary();
 
         ApplicationConfig applicationConfig = getApplication();
 
+        // 在这个里面获取到一个metadata type，元数据类型
         String metadataType = applicationConfig.getMetadataType();
         // FIXME, multiple metadata config support.
+        // 在这里我们做了一个元数据的配置，里面包含了我们一开始搞的那个东西，metadata report上报的配置
         Collection<MetadataReportConfig> metadataReportConfigs = configManager.getMetadataConfigs();
         if (CollectionUtils.isEmpty(metadataReportConfigs)) {
             if (REMOTE_METADATA_STORAGE_TYPE.equals(metadataType)) {
@@ -277,6 +318,8 @@ public class DefaultApplicationDeployer extends AbstractDeployer<ApplicationMode
             return;
         }
 
+        // 就可以往后走了，app model拿到一个bean容器，从bean容器里拿到了一个MetadataReportInstance
+        // 一看这个东西，就属于我们的元数据上报组件的实例
         MetadataReportInstance metadataReportInstance = applicationModel.getBeanFactory().getBean(MetadataReportInstance.class);
         List<MetadataReportConfig> validMetadataReportConfigs = new ArrayList<>(metadataReportConfigs.size());
         for (MetadataReportConfig metadataReportConfig : metadataReportConfigs) {

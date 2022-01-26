@@ -179,9 +179,12 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
         prepareInvocation(invocation);
 
         // do invoke rpc invocation and return async result
+        // 通过源码分析，可以很明确的发现一点，他们rpc调用返回的结果，是异步的，async
         AsyncRpcResult asyncResult = doInvokeAndReturn(invocation);
 
         // wait rpc result if sync
+        // dubbo默认情况下发起rpc请求，是异步化的操作
+        // 但是如果你是要同步的话，那么是可以在这里等待同步的结果
         waitForResultIfSync(asyncResult, invocation);
 
         return asyncResult;
@@ -291,6 +294,10 @@ public abstract class AbstractInvoker<T> implements Invoker<T> {
     // -- Protected api
 
     protected ExecutorService getCallbackExecutor(URL url, Invocation inv) {
+        // 通过SPI机制拿到ExecutorRepository，线程池存储组件，把dubbo内部所有的线程池都放在里面了
+        // 或者是要创建新的线程池也是通过他，model组件体系很简单，就是封装了dubbo内部所有的公共的组件体系，设计模式来形容
+        // model组件设计思想，门面模式，Model（本身是没有意义的）-> 门面，封装了很多的组件，SPI、service数据、配置、repository组件、bean factory
+        // model就成为了一个门面，在整个dubbo框架里，如果要用到一些公共组件，就直接找model去获取就可以了
         ExecutorService sharedExecutor = url.getOrDefaultApplicationModel().getExtensionLoader(ExecutorRepository.class)
             .getDefaultExtension()
             .getExecutor(url);

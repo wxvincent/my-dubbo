@@ -52,6 +52,14 @@ import static org.apache.dubbo.metadata.ServiceNameMapping.getAppNames;
 
 /**
  * ZookeeperMetadataReport
+ *
+ * 关于元数据的存储，很关键的，任何一个服务实例，都是需要具备自己的一些元数据的
+ * 如何对服务实例进行描述，接口名字、版本号、名称，诸如此类的一些东西
+ * 既然有了元数据之后，就必须有地方来存储元数据，对于很多的框架或者系统，元数据存储，在本地磁盘文件里的
+ * 如果是在本地磁盘文件里，就会导致一个问题，如果别人想要读取你的元数据，存放在你的本地磁盘
+ *
+ * dubbo才选择了，把他的注册中心，zk技术，作为configcenter，metadata report
+ *
  */
 public class ZookeeperMetadataReport extends AbstractMetadataReport {
 
@@ -131,6 +139,7 @@ public class ZookeeperMetadataReport extends AbstractMetadataReport {
     }
 
     private void storeMetadata(MetadataIdentifier metadataIdentifier, String v) {
+        // 就是根据一套规则，构建出来zk path，去做一个节点的创建，把元数据以json的格式，存储在了zk里面就可以了
         zkClient.create(getNodePath(metadataIdentifier), v, false);
     }
 

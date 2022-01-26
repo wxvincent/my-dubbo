@@ -122,6 +122,7 @@ public class WrappedChannelHandler implements ChannelHandlerDelegate {
                 return executor;
             }
         } else {
+         // 顾名思义，共享线程池，跟其他的一些任务是共享一个线程池
             return getSharedExecutorService();
         }
     }
@@ -140,9 +141,13 @@ public class WrappedChannelHandler implements ChannelHandlerDelegate {
 
         // note: url.getOrDefaultApplicationModel() may create new application model
         ApplicationModel applicationModel = url.getOrDefaultApplicationModel();
+        // ExecutorRepository主要是负责来获取你的线程池的组件的
+        // ExtensionLoader，基于SPI扩展机制，去获取你的实现类对象
         ExecutorRepository executorRepository =
                 applicationModel.getExtensionLoader(ExecutorRepository.class).getDefaultExtension();
         ExecutorService executor = executorRepository.getExecutor(url);
+        // 传入进去了一个url，从url里提取了一些参数出来，会根据你的url的参数来决定要获取到什么样的线程池
+        // 关于big group，业务线程池他的不同的线程池的构造策略，我们后面会在讲解分发策略，线程池的构建的策略
         if (executor == null) {
             executor = executorRepository.createExecutorIfAbsent(url);
         }

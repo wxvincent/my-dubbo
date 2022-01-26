@@ -51,6 +51,8 @@ import static org.apache.dubbo.rpc.RpcException.REGISTRY_EXCEPTION;
  * Zookeeper {@link ServiceDiscovery} implementation based on
  * <a href="https://curator.apache.org/curator-x-discovery/index.html">Apache Curator X Discovery</a>
  */
+// ServiceDiscovery和Registry两套API，干的事儿是差不多的
+// 区别就是在于API是不同的
 public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -87,6 +89,9 @@ public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
     @Override
     public void doRegister(ServiceInstance serviceInstance) {
         try {
+            // 所以说这里的话，用curator搞一个zk client，封装为ServiceDiscovery
+            // ServiceDiscovery这套东西，有一个什么好处呢？直接帮你底层屏蔽了zk操作细节，暴露的是一套完整的服务注册中心的接口
+            // 基于zk的各种操作细节没了，都被封装掉了，对你来说，就是执行服务注册，服务订阅这些操作就可以了
             serviceDiscovery.registerService(build(serviceInstance));
         } catch (Exception e) {
             throw new RpcException(REGISTRY_EXCEPTION, "Failed register instance " + serviceInstance.toString(), e);

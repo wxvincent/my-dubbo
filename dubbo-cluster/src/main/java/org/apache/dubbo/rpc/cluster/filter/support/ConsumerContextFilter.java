@@ -61,13 +61,21 @@ public class ConsumerContextFilter implements ClusterFilter, ClusterFilter.Liste
 
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        // RpcInvocation，代表了一次rpc调用
+        // RpcStatus，代表了你对指定服务、方法调用的统计状态数据
+        // RpcContext，代表了rpc调用过程中的一个上下文，就代表了rpc相关的一些东西
+
+        // 当前线程自己绑定的一个数据空间，作为他的rpc上下文
         RpcContext.getServiceContext()
-                .setInvocation(invocation)
-                .setLocalAddress(NetUtils.getLocalHost(), 0);
+            // 当前这个rpc调用放到了里面去，同时有很多线程都在发起rpc访问
+            .setInvocation(invocation)
+            // 怎么可能说一个RpcContext里面就一个rpc掉用，每个线程在执行一个rpc调用，此时每个线程rpc调用是不是应该有自己的上下文
+            .setLocalAddress(NetUtils.getLocalHost(), 0);
 
         RpcContext context = RpcContext.getClientAttachment();
         context.setAttachment(REMOTE_APPLICATION_KEY, invoker.getUrl().getApplication());
         if (invocation instanceof RpcInvocation) {
+            // 对rpc invocation设置一下invoker
             ((RpcInvocation) invocation).setInvoker(invoker);
         }
 
@@ -75,6 +83,7 @@ public class ConsumerContextFilter implements ClusterFilter, ClusterFilter.Liste
             for (PenetrateAttachmentSelector supportedSelector : supportedSelectors) {
                 Map<String, Object> selected = supportedSelector.select();
                 if (CollectionUtils.isNotEmptyMap(selected)) {
+                    // 就给我们的rpc invocation添加了一个object attachments
                     ((RpcInvocation) invocation).addObjectAttachments(selected);
                 }
             }

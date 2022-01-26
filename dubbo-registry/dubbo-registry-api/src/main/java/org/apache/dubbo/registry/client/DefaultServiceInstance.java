@@ -56,6 +56,8 @@ public class DefaultServiceInstance implements ServiceInstance {
 
     private boolean healthy = true;
 
+    // 每个服务实例都可以带一个metadata，元数据
+    // 元数据，就是大量的key-value对，一个一个的key-value
     private Map<String, String> metadata = new HashMap<>();
 
     private transient String address;

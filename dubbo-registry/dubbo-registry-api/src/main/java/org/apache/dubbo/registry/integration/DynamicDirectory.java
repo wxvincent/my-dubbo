@@ -55,7 +55,17 @@ import static org.apache.dubbo.remoting.Constants.CHECK_KEY;
 
 
 /**
- * DynamicDirectory
+ * RegistryDirectory
+ *
+ * 细节的源码分析，那么就全部都是说用静态代码来分析了，除非是特殊意外，可能会用动态调试来分析
+ * DynamicDirectory = RegistryDirectory，2.7.x，2.6.x源码
+ * 他是最核心的用于进行服务发现的一个组件，consumer端肯定是要去调用一个provider端的
+ * 动态目录，动态可变的一个目标服务实例的集群地址（invokers）
+ *
+ * 目标服务实例集群，不光是说要通过主动查询zk来第一次获取集群地址，还需要zk反过来，如果目标服务实例集群地址有变化
+ * zk会感受到了，zk应该是会反过来推送你的目标服务实例集群地址给DynamicDirectory，动态更新和维护
+ * 自己内存里的目标服务实例集群地址列表，invokers
+ *
  */
 public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implements NotifyListener {
 
@@ -172,6 +182,7 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     public void subscribe(URL url) {
         setSubscribeUrl(url);
+        // 在这里是一个关键的方法，实现服务发现靠的就是这个方法
         registry.subscribe(url, this);
     }
 

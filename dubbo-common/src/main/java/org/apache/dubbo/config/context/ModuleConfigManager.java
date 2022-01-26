@@ -54,6 +54,7 @@ public class ModuleConfigManager extends AbstractConfigManager {
 
     private static final Logger logger = LoggerFactory.getLogger(ModuleConfigManager.class);
 
+    // 也是属于各个服务的相关的配置数据
     private Map<String, AbstractInterfaceConfig> serviceConfigCache = new ConcurrentHashMap<>();
     private final ConfigManager applicationConfigManager;
 

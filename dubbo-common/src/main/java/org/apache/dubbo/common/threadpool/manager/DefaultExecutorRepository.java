@@ -62,6 +62,8 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
     private final ExecutorService sharedExecutor;
     private final ScheduledExecutorService sharedScheduledExecutor;
 
+    // 此处的ring是一个取用环，用循环的概念不停的取用list里面的数据，重复循环的取用
+    // 不是一个数据环，对一个大小有限的数据结构，重复不停的循环写入，写到尾部了，再从头部开始写入
     private Ring<ScheduledExecutorService> scheduledExecutors = new Ring<>();
 
     private volatile ScheduledExecutorService serviceExportExecutor;
@@ -88,14 +90,19 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
     private ApplicationModel applicationModel;
 
     public DefaultExecutorRepository() {
+        // 在构建他的时候，会有一个用于共享使用的线程池，NamedThreadFactory是干什么的，用来设定你的这个线程池里的线程的名称的前缀就可以了
         sharedExecutor = Executors.newCachedThreadPool(new NamedThreadFactory("Dubbo-shared-handler", true));
+        // 共享的定时调度的线程池
         sharedScheduledExecutor = Executors.newScheduledThreadPool(8, new NamedThreadFactory("Dubbo-shared-scheduler", true));
 
+        // 有多少个cpu核，此时就可以做一个cpu核数量的遍历
         for (int i = 0; i < DEFAULT_SCHEDULER_SIZE; i++) {
+            // 通过遍历，会创建一个一个的scheduled executor service
             ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
                 new NamedThreadFactory("Dubbo-framework-scheduler-" + i, true));
             scheduledExecutors.addItem(scheduler);
 
+            // router chain里面搞到的线程池，是一个线程数量固定位1的，有队列排队的一个线程池
             executorServiceRing.addItem(new ThreadPoolExecutor(1, 1,
                 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>(1024), new NamedInternalThreadFactory("Dubbo-state-router-loop-" + i, true)
@@ -126,13 +133,17 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
      * @return
      */
     public synchronized ExecutorService createExecutorIfAbsent(URL url) {
+        // data缓存，在某个地方肯定会有一个代码触发，肯定会触发这个方法的执行
+
         Map<Integer, ExecutorService> executors = data.computeIfAbsent(EXECUTOR_SERVICE_COMPONENT_KEY, k -> new ConcurrentHashMap<>());
         // Consumer's executor is sharing globally, key=Integer.MAX_VALUE. Provider's executor is sharing by protocol.
+        // 一旦第一次被触发，这里必然会提取出来provider端的端口号，20880
         Integer portKey = CONSUMER_SIDE.equalsIgnoreCase(url.getParameter(SIDE_KEY)) ? Integer.MAX_VALUE : url.getPort();
         if (url.getParameter(THREAD_NAME_KEY) == null) {
             url = url.putAttribute(THREAD_NAME_KEY, "Dubbo-protocol-"+portKey);
         }
         URL finalUrl = url;
+        // 把你的20880作为一个key，同时创建出一个线程池出来
         ExecutorService executor = executors.computeIfAbsent(portKey, k -> createExecutor(finalUrl));
         // If executor has been shut down, create a new one
         if (executor.isShutdown() || executor.isTerminated()) {
@@ -144,6 +155,7 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
     }
 
     public ExecutorService getExecutor(URL url) {
+        // 先拿到一个固定的port->executor线程池之间的缓存
         Map<Integer, ExecutorService> executors = data.get(EXECUTOR_SERVICE_COMPONENT_KEY);
 
         /**
@@ -157,6 +169,7 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
         }
 
         // Consumer's executor is sharing globally, key=Integer.MAX_VALUE. Provider's executor is sharing by protocol.
+        // 计算一个所谓的port key
         Integer portKey = CONSUMER_SIDE.equalsIgnoreCase(url.getParameter(SIDE_KEY)) ? Integer.MAX_VALUE : url.getPort();
         ExecutorService executor = executors.get(portKey);
         if (executor != null && (executor.isShutdown() || executor.isTerminated())) {
@@ -201,6 +214,8 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
     }
 
     @Override
+    // 为什么线程池需要放在类似于ring的取用环，数据环，搞错了，看花眼了
+    // 你不停的取用，取用，取用，取用的过程中，是在循环不断的取用不同的线程池
     public ScheduledExecutorService nextScheduledExecutor() {
         return scheduledExecutors.pollItem();
     }
@@ -352,6 +367,14 @@ public class DefaultExecutorRepository implements ExecutorRepository, ExtensionA
     }
 
     private ExecutorService createExecutor(URL url) {
+        // 也是用的SPI的机制
+        // 讲过dubbo的业务线程池，有很多种类型，默认的就是fixed threadpool
+        // 默认是fixed threadpool，adaptive自适应，他其实在真正获取线程池的时候，是会去根据url里的具体的参数来找到对应的实现类
+        // adaptive，但是可以 看出来默认还是走fixed threadpool，默认的线程数量就是200个
+
+        // SPI的adaptive自适应机制
+        // 还是去生成代理类，代理类的getExecutor方法被调用，在里面必须通过url的参数，提取出来对应的线程池的短名称
+        // 去找到对应的实现类的，再执行真正的getExecutor方法
         return (ExecutorService) extensionAccessor.getExtensionLoader(ThreadPool.class).getAdaptiveExtension().getExecutor(url);
     }
 

@@ -115,6 +115,7 @@ public class DecodeableRpcInvocation extends RpcInvocation implements Codec, Dec
     @Override
     public Object decode(Channel channel, InputStream input) throws IOException {
         ObjectInput in = CodecSupport.getSerialization(channel.getUrl(), serializationType)
+             // 基于hessian2框架，搞了一个支持反序列化的输入流，嫁接了底层的输入流这样子
             .deserialize(channel.getUrl(), input);
         this.put(SERIALIZATION_ID_KEY, serializationType);
 
@@ -172,6 +173,9 @@ public class DecodeableRpcInvocation extends RpcInvocation implements Codec, Dec
                         pts = methodDescriptor.getParameterClasses();
                         this.setReturnTypes(methodDescriptor.getReturnTypes());
 
+                        // 本次你的rpc调用，肯定是针对一个接口的一个方法
+                        // 此时他就必须把你的接口、方法、方法参数、方法返回值，都提取出来这样子
+
                         // switch TCCL
                         if (CollectionUtils.isNotEmpty(providerModels)) {
                             if (providerModels.size() == 1) {
@@ -211,6 +215,8 @@ public class DecodeableRpcInvocation extends RpcInvocation implements Codec, Dec
                 args = new Object[pts.length];
                 for (int i = 0; i < args.length; i++) {
                     try {
+                     // 跟我们序列化一样，把参数对象一个一个的写入的支持序列化的流里去
+                     // 此时是从支持反序列化的流里，把你的方法的参数对象，一个一个的读取出来
                         args[i] = in.readObject(pts[i]);
                     } catch (Exception e) {
                         if (log.isWarnEnabled()) {

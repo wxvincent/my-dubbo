@@ -37,6 +37,7 @@ public class ScopeBeanExtensionInjector implements ExtensionInjector, ScopeModel
 
     @Override
     public <T> T getInstance(Class<T> type, String name) {
+        // 还可以根据容器，根据接口类型，名称，protocol
         return beanFactory.getBean(name, type);
     }
 }

@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class ExtensionDirector implements ExtensionAccessor {
 
+    // key就是接口类型的class对象，value就是extension loader
     private final ConcurrentMap<Class<?>, ExtensionLoader<?>> extensionLoadersMap = new ConcurrentHashMap<>(64);
     private final ConcurrentMap<Class<?>, ExtensionScope> extensionScopeMap = new ConcurrentHashMap<>(64);
     private final ExtensionDirector parent;
@@ -62,6 +63,9 @@ public class ExtensionDirector implements ExtensionAccessor {
         return this;
     }
 
+    // 他是一个extension loader管理组件
+    // 就可以拿到各种接口的extension loader，去拿到接口的扩展实现类
+    // 一般来说，都是先针对一个加了@SPI注解的接口的class，传递进来，去获取一个extension loader
     @Override
     public <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
         checkDestroyed();
@@ -77,6 +81,7 @@ public class ExtensionDirector implements ExtensionAccessor {
         }
 
         // 1. find in local cache
+        // 按照你的接口的class类型去获取extension loader缓存
         ExtensionLoader<T> loader = (ExtensionLoader<T>) extensionLoadersMap.get(type);
 
         ExtensionScope scope = extensionScopeMap.get(type);
@@ -86,19 +91,24 @@ public class ExtensionDirector implements ExtensionAccessor {
             extensionScopeMap.put(type, scope);
         }
 
+        // 获取出来的extension loader是空的，同时scope是self范围
         if (loader == null && scope == ExtensionScope.SELF) {
             // create an instance in self scope
             loader = createExtensionLoader0(type);
         }
 
         // 2. find in parent
+        // 如果说extension loader没有拿到，同时你的范围不是self
         if (loader == null) {
+            // 是有一个什么，在创建extension loader的过程中，会有父组件依赖和搜寻
             if (this.parent != null) {
                 loader = this.parent.getExtensionLoader(type);
             }
         }
 
         // 3. create it
+        // 第一步，先去缓存搜索；第二步，scope=self，尝试直接自己创建；第三步，parent里搜索
+        // 最后一步，直接尝试自己创建extension loader
         if (loader == null) {
             loader = createExtensionLoader(type);
         }

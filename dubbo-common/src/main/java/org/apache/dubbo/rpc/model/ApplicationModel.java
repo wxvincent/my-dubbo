@@ -57,18 +57,25 @@ public class ApplicationModel extends ScopeModel {
     private final List<ModuleModel> moduleModels = new CopyOnWriteArrayList<>();
     private final List<ModuleModel> pubModuleModels = new CopyOnWriteArrayList<>();
     private Environment environment;
+    // 服务配置相关的一些信息
     private ConfigManager configManager;
+    // 服务数据相关的一些存储
     private ServiceRepository serviceRepository;
+    // 属于application层级的一些组件的生命周期管理
     private ApplicationDeployer deployer;
 
+    // 父级组件
     private final FrameworkModel frameworkModel;
 
+    // 内部的一个module model组件
     private ModuleModel internalModule;
 
+    // 默认的一个module model组件
     private volatile ModuleModel defaultModule;
 
     // internal module index is 0, default module index is 1
     private AtomicInteger moduleIndex = new AtomicInteger(0);
+    // 是一个锁
     private Object moduleLock = new Object();
 
     private final boolean isInternal;
@@ -214,6 +221,7 @@ public class ApplicationModel extends ScopeModel {
         internalModule = new ModuleModel(this, true);
         this.serviceRepository = new ServiceRepository(this);
 
+        // 通过SPI机制，去获取了ApplicationInitListener接口的扩展实现，回调
         ExtensionLoader<ApplicationInitListener> extensionLoader = this.getExtensionLoader(ApplicationInitListener.class);
         Set<String> listenerNames = extensionLoader.getSupportedExtensions();
         for (String listenerName : listenerNames) {
@@ -298,6 +306,8 @@ public class ApplicationModel extends ScopeModel {
 
     public ConfigManager getApplicationConfigManager() {
         if (configManager == null) {
+            // 会通过我们之前讲解的SPI机制
+            // SPI的机制，最经典的用法，就是在这里
             configManager = (ConfigManager) this.getExtensionLoader(ApplicationExt.class)
                 .getExtension(ConfigManager.NAME);
         }
@@ -309,6 +319,7 @@ public class ApplicationModel extends ScopeModel {
     }
 
     public ExecutorRepository getApplicationExecutorRepository() {
+        // 其实每次都是通过SPI机制来获取到对应的线程池repository
         return this.getExtensionLoader(ExecutorRepository.class).getDefaultExtension();
     }
 

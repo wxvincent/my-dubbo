@@ -84,12 +84,14 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
 
     @Override
     public Result doInvoke(Invocation invocation) throws Throwable {
+        // 直接把之前本地发布过的服务实例从exporterMap里拿出来就可以了
         Exporter<?> exporter = InjvmProtocol.getExporter(exporterMap, getUrl());
         if (exporter == null) {
             throw new RpcException("Service [" + key + "] not found.");
         }
         RpcContext.getServiceContext().setRemoteAddress(LOCALHOST_VALUE, 0);
         // Solve local exposure, the server opens the token, and the client call fails.
+        // 直接从injvm exporter里获取之前本地发布的proxy invoker
         Invoker<?> invoker = exporter.getInvoker();
         URL serverURL = invoker.getUrl();
         boolean serverHasToken = serverURL.hasParameter(Constants.TOKEN_KEY);
@@ -107,6 +109,9 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
             // use consumer executor
             ExecutorService executor = executorRepository.createExecutorIfAbsent(getUrl());
             CompletableFuture<AppResponse> appResponseFuture = CompletableFuture.supplyAsync(() -> {
+                // 必然会去调用我们的proxy invoker的invoker方法，目标实现类的方法就会被调用
+                // javassist机制去调用，jdk反射去进行调用
+
                 Result result = invoker.invoke(copiedInvocation);
                 if (result.hasException()) {
                     return new AppResponse(result.getException());
@@ -121,6 +126,8 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
             result.setExecutor(executor);
             return result;
         } else {
+            // 必然会去调用我们的proxy invoker的invoker方法，目标实现类的方法就会被调用
+            // javassist机制去调用，jdk反射去进行调用
             Result result = invoker.invoke(copiedInvocation);
             if (result.hasException()) {
                 return result;

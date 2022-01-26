@@ -127,6 +127,7 @@ public abstract class Wrapper {
             throw new IllegalArgumentException("Can not create wrapper for primitive type: " + c);
         }
 
+        // 如何动态去生成一个wrapper出来
         String name = c.getName();
         ClassLoader cl = ClassUtils.getClassLoader(c);
 
@@ -253,6 +254,8 @@ public abstract class Wrapper {
 
         // make class
         long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
+
+        // 他是动态拼接一个wrapper class的代码
         ClassGenerator cc = ClassGenerator.newInstance(cl);
         cc.setClassName(c.getName() + "DubboWrap" + id);
         cc.setSuperClass(Wrapper.class);
@@ -286,6 +289,8 @@ public abstract class Wrapper {
             for (Method m : ms.values()) {
                 wc.getField("mts" + ix++).set(null, m.getParameterTypes());
             }
+
+            // 先是生成一个class，再用这个生成的class，去使用jdk反射构造实例
             return (Wrapper) wc.getDeclaredConstructor().newInstance();
         } catch (RuntimeException e) {
             throw e;

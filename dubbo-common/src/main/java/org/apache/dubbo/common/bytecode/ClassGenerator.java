@@ -305,6 +305,8 @@ public final class ClassGenerator {
                 mClassName = (mSuperClass == null || javassist.Modifier.isPublic(ctcs.getModifiers())
                         ? ClassGenerator.class.getName() : mSuperClass + "$sc") + id;
             }
+            // ClassPool是javassist源码，我们不可能继续去看了，dubbo默认情况下创建Wrapper包装类
+            // 动态拼接类代码字符串，直接对类代码字符串，使用javassist进行动态类生成
             mCtc = mPool.makeClass(mClassName);
             if (mSuperClass != null) {
                 mCtc.setSuperclass(ctcs);
@@ -333,6 +335,9 @@ public final class ClassGenerator {
             if (mDefaultConstructor) {
                 mCtc.addConstructor(CtNewConstructor.defaultConstructor(mCtc));
             }
+
+            // 任何一个类，就这点东西：类、接口、父类、field、方法、构造函数
+
             if (mConstructors != null) {
                 for (String code : mConstructors) {
                     if (code.charAt(0) == ':') {

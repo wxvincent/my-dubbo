@@ -77,6 +77,8 @@ public class RpcContext {
         }
     };
 
+    // thread local，线程本地化的一套数据空间，thread local这个里面的数据读写存取，都是当前线程才有权限的
+    // 通过thread local，就可以把各个线程读取的数据空间做一个隔离
     private static final InternalThreadLocal<RpcServiceContext> SERVICE_CONTEXT = new InternalThreadLocal<RpcServiceContext>() {
         @Override
         protected RpcServiceContext initialValue() {
@@ -163,6 +165,7 @@ public class RpcContext {
      * @return context
      */
     public static RpcServiceContext getServiceContext() {
+        // 当前一个线程在执行一个rpc调用的时候，此时就会去获取一个自己的rpc context
         return SERVICE_CONTEXT.get();
     }
 

@@ -109,7 +109,10 @@ final public class MockInvoker<T> implements Invoker<T> {
         if (mock.startsWith(RETURN_PREFIX)) {
             mock = mock.substring(RETURN_PREFIX.length()).trim();
             try {
+                // 针对这个rpc调用，看一下本次调用要返回的类型是什么
                 Type[] returnTypes = RpcUtils.getReturnTypes(invocation);
+                // 他会根据你的mock的值，帮助你去生成一个mock出来的值就可以了
+                // 返回的可能是null、object、map、list、字符串
                 Object value = parseMockValue(mock, returnTypes);
                 return AsyncRpcResult.newDefaultAsyncResult(value, invocation);
             } catch (Exception ew) {

@@ -90,6 +90,11 @@ import static org.apache.dubbo.rpc.protocol.dubbo.Constants.SHARE_CONNECTIONS_KE
 
 /**
  * dubbo protocol support.
+ *
+ * 是负责把我们的服务对外进行网络发布的，transporter，exchanger，rpc，serialization，netty server
+ * 搞的比较简略了，就必须要把这块东西进行深入剖析，这块才是我们的核心和重点
+ * dubbo服务是如何对外进行网络发布的
+ *
  */
 public class DubboProtocol extends AbstractProtocol {
 
@@ -269,6 +274,11 @@ public class DubboProtocol extends AbstractProtocol {
                 (String) inv.getObjectAttachments().get(VERSION_KEY),
                 (String) inv.getObjectAttachments().get(GROUP_KEY)
         );
+
+        // 根据你的服务
+        // 你的invocation肯定是要针对你的某个服务进行调用
+        // 必然要把你的服务之前发布出去的exporter可以拿出来，封装了你的proxy invoker
+        // 只要能够拿到proxy invoker，就可以在底层通过javassist技术或者是jdk反射技术，去调用目标实现类就可以了
         DubboExporter<?> exporter = (DubboExporter<?>) exporterMap.get(serviceKey);
 
         if (exporter == null) {
@@ -295,6 +305,8 @@ public class DubboProtocol extends AbstractProtocol {
 
         // export service.
         String key = serviceKey(url);
+
+        // exporter组件，就代表了你的invoker被发布出去了
         DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);
 
         //export a stub service for dispatching event
@@ -311,7 +323,9 @@ public class DubboProtocol extends AbstractProtocol {
             }
         }
 
+        // 这个就是打开对外的网络服务器，可以对外提供网络请求处理
         openServer(url);
+        // 对serialization，序列化和反序列化这一块做一个处理
         optimizeSerialization(url);
 
         return exporter;
@@ -329,6 +343,7 @@ public class DubboProtocol extends AbstractProtocol {
                 synchronized (this) {
                     server = serverMap.get(key);
                     if (server == null) {
+                        // 在这里会进行网络服务器的构建
                         serverMap.put(key, createServer(url));
                     }else {
                         server.reset(url);
@@ -360,6 +375,10 @@ public class DubboProtocol extends AbstractProtocol {
         if (StringUtils.isNotEmpty(str) && !url.getOrDefaultFrameworkModel().getExtensionLoader(Transporter.class).hasExtension(str)) {
             throw new RpcException("Unsupported server type: " + str + ", url: " + url);
         }
+
+
+        // 为什么dubbo中要设计出来exchange这一层
+        // 设计思想，官方，exchange这一层负责同步转异步，request/response网络请求响应模型的封装
 
         ExchangeServer server;
         try {
@@ -428,6 +447,8 @@ public class DubboProtocol extends AbstractProtocol {
         optimizeSerialization(url);
 
         // create rpc invoker.
+        // 针对你的目标服务实例的机器的url，构建一个dubbo invoker
+        // 针对这个url，会有get client这个过程，get client这个过程就是针对目标服务实例进行网络连接
         DubboInvoker<T> invoker = new DubboInvoker<T>(serviceType, url, getClients(url), invokers);
         invokers.add(invoker);
 

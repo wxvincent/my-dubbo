@@ -28,10 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.apache.dubbo.common.constants.CommonConstants.APPLICATION_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_DIRECTORY;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_METADATA_STORAGE_TYPE;
+import static org.apache.dubbo.common.constants.CommonConstants.*;
 import static org.apache.dubbo.common.utils.StringUtils.isEmpty;
 import static org.apache.dubbo.metadata.report.support.Constants.METADATA_REPORT_KEY;
 
@@ -72,6 +69,8 @@ public class MetadataReportInstance implements Disposable {
         if (metadataType == null) {
             this.metadataType = DEFAULT_METADATA_STORAGE_TYPE;
         }
+        // 在这里通过SPI机制的adaptive自适应，生成一个代理类，底层会通过自适应的机制，根据url里的参数真实的去拿到对应的实现类，来调用他的方法
+        // 他应为我们指定的是用zk作为一个元数据中心，拿到的应该是一个ZooKeeperMetadataReportFactory
 
         MetadataReportFactory metadataReportFactory = applicationModel.getExtensionLoader(MetadataReportFactory.class).getAdaptiveExtension();
         for (MetadataReportConfig metadataReportConfig : metadataReportConfigs) {
@@ -103,6 +102,7 @@ public class MetadataReportInstance implements Disposable {
         return metadataReports;
     }
 
+    // 可以通过他拿到具体的一个MetadataReport
     public MetadataReport getMetadataReport(String registryKey) {
         MetadataReport metadataReport = metadataReports.get(registryKey);
         if (metadataReport == null && metadataReports.size() > 0) {

@@ -116,7 +116,7 @@ public interface CommonConstants {
 
     String CORE_THREADS_KEY = "corethreads";
 
-    String THREADS_KEY = "threads";
+    String THREADS_KEY = "threads"; // dubbo里有另外一个核心的参数，就是threads这个参数，默认是200，你可以修改他的数量，500，800，1000，cpu核
 
     String QUEUES_KEY = "queues";
 
@@ -126,7 +126,7 @@ public interface CommonConstants {
 
     String DEFAULT_CLIENT_THREADPOOL = "cached";
 
-    String IO_THREADS_KEY = "iothreads";
+    String IO_THREADS_KEY = "iothreads"; // ioThreads是dubbo里的关键可配置参数之一，决定了你的netty server的io线程有多少
 
     String KEEP_ALIVE_KEY = "keep.alive";
 

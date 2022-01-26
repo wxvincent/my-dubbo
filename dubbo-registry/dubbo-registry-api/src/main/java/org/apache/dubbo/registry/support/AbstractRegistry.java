@@ -69,6 +69,11 @@ import static org.apache.dubbo.registry.Constants.USER_HOME;
 
 /**
  * AbstractRegistry. (SPI, Prototype, ThreadSafe)
+ *
+ * 主要应该是包含了注册中心里面一些通用的、公共的能力
+ * 两大块公共基础能力，基于本地磁盘文件的数据缓存写入和重启恢复加载的一套机制
+ * 注册、取消注册、订阅、取消订阅、变更通知，注册中心相关的交互逻辑，在这里都有对应的数据结构存储
+ *
  */
 public abstract class AbstractRegistry implements Registry {
 
@@ -81,37 +86,69 @@ public abstract class AbstractRegistry implements Registry {
     // Log output
     protected final Logger logger = LoggerFactory.getLogger(getClass());
     // Local disk cache, where the special key value.registries records the list of registry centers, and the others are the list of notified service providers
+    // local磁盘缓存，存储了一些缓存的数据
     private final Properties properties = new Properties();
     // File cache timing writing
+    // 包含了注册缓存数据的线程池
     private final ExecutorService registryCacheExecutor;
+    // 最近一次缓存变更时间戳，long，timestamp
     private final AtomicLong lastCacheChanged = new AtomicLong();
+    // 存储properties重试次数
     private final AtomicInteger savePropertiesRetryTimes = new AtomicInteger();
+    // 已经注册过的url地址的存储，就放在set集合里
     private final Set<URL> registered = new ConcurrentHashSet<>();
+    // 针对url地址执行的订阅，consumer里面，你对一个url地址执行了订阅，你的监听器就会被放在这里
     private final ConcurrentMap<URL, Set<NotifyListener>> subscribed = new ConcurrentHashMap<>();
+    // 如果说订阅之后，有一些服务实例的变更，zk会反向通知，此时会出现notify操作，url地址如果有反向推送变更通知，此时会在这里
     private final ConcurrentMap<URL, Map<String, List<URL>>> notified = new ConcurrentHashMap<>();
     // Is it synchronized to save the file
+    // 是否要同步存储数据到磁盘文件里去
     private boolean syncSaveFile;
+    // 注册中心的url地址，比如说zk，zookeeper://ip:2181/
     private URL registryUrl;
     // Local disk cache file
+    // 本地磁盘上面的缓存文件的File句柄
     private File file;
+    // 本地缓存是否启用
     private boolean localCacheEnabled;
     protected RegistryManager registryManager;
     protected ApplicationModel applicationModel;
 
     public AbstractRegistry(URL url) {
         setUrl(url);
+        setUrl(url); // 设置注册中心的url地址
+
+        // 从model组建里获取bean工厂，从bean容器里获取RegistryManager实例
         registryManager = url.getOrDefaultApplicationModel().getBeanFactory().getBean(RegistryManager.class);
+        // 本地磁盘缓存是否开启，默认就是开启的，你的每个provider或者consumer，但凡用了zookeeper registry，人家都会自动开启本地磁盘缓存
+        // 这样的话就是说可以确保，你要是自己突然宕机了，重启，重新注册和订阅，但是在这个过程中，磁盘里缓存的一些数据，可以从磁盘里恢复出来，继续使用
         localCacheEnabled = url.getParameter(REGISTRY_LOCAL_FILE_CACHE_ENABLED, true);
+        // 获取到一个共享线程池，cache线程池，线程数量无限大，但是空闲超过60s的线程会自动回收
+        // 通过model组件拿到SPI，SPI去获取组件接口的实例，在任何地方，都可以拿到公共使用的线程池存储组件，从里面拿到自己需要的线程池
         registryCacheExecutor = url.getOrDefaultApplicationModel().getDefaultExtension(ExecutorRepository.class).getSharedExecutor();
+
+        // 如果本地缓存启用了，就会去进行磁盘持久化
         if (localCacheEnabled) {
             // Start file save timer
+            // 启动一个自动刷盘存储的定时器，timer，一直不停的执行
+            // 肯定是内存里的数据会不停的变化，会有一个定时器，定时的把数据写入到磁盘里去
+            // 本地磁盘的缓存，如果说你突然崩溃了，重启之后要重新注册，或者是订阅发现
+            // 但是此时，万一说，zk此时不可用，服务订阅和发现，短时间内就没法去做
+            // 此时可以从磁盘缓存里恢复一些数据回来，之前订阅和发现过的数据，都是可以使用的
+
+            // 是否同步写入磁盘文件里去，默认是false
             syncSaveFile = url.getParameter(REGISTRY_FILESAVE_SYNC_KEY, false);
+
+            // 默认的磁盘文件的目录和文件名，user home（操作系统他的用户的目录）
+            // /zhangsan/.dubbo/dubbo-registry-demo-zookeeper-127.0.0.1-2181.cache
             String defaultFilename = System.getProperty(USER_HOME) + DUBBO_REGISTRY +
                 url.getApplication() + "-" + url.getAddress().replaceAll(":", "-") + CACHE;
             String filename = url.getParameter(FILE_KEY, defaultFilename);
+            // 把文件名称封装为File对象
             File file = null;
             if (ConfigUtils.isNotEmpty(filename)) {
                 file = new File(filename);
+                // 是属于对文件的上级目录的处理
                 if (!file.exists() && file.getParentFile() != null && !file.getParentFile().exists()) {
                     if (!file.getParentFile().mkdirs()) {
                         throw new IllegalArgumentException("Invalid registry cache file " + file + ", cause: Failed to create directory " + file.getParentFile() + "!");
@@ -121,7 +158,12 @@ public abstract class AbstractRegistry implements Registry {
             this.file = file;
             // When starting the subscription center,
             // we need to read the local cache file for future Registry fault tolerance processing.
+            // 假设说是第一次启动一个干净的服务，此时本地缓存里是什么都没有的，是空的
+            // 但是如果是之前启动过，订阅和发现过服务数据，所以说本地磁盘里都是有缓存数据的，再次重启就可以先加载本地磁盘里的缓存数据
+            // 就是说把本地磁盘里的数据，都加载到properties里去，做好一个准备，万一注册中心此时故障，就可以用缓存数据了
             loadProperties();
+            // notify概念，从我们的注册中心的url地址里，获取backup备用一批url地址
+            // 拿到这批备用url地址之后，做了一个notify操作
             notify(url.getBackupUrls());
         }
     }
@@ -185,6 +227,7 @@ public abstract class AbstractRegistry implements Registry {
             if (!lockfile.exists()) {
                 lockfile.createNewFile();
             }
+            // 针对锁文件，lock file，搞一个RandomAccessFile
             try (RandomAccessFile raf = new RandomAccessFile(lockfile, "rw");
                 FileChannel channel = raf.getChannel()) {
                 FileLock lock = channel.tryLock();
@@ -196,7 +239,9 @@ public abstract class AbstractRegistry implements Registry {
                     if (!file.exists()) {
                         file.createNewFile();
                     }
+                    // 磁盘io，file output stream
                     try (FileOutputStream outputFile = new FileOutputStream(file)) {
+                        // 直接基于jdk提供的API，进行文件io操作
                         properties.store(outputFile, "Dubbo Registry Cache");
                     }
                 } finally {
@@ -204,6 +249,7 @@ public abstract class AbstractRegistry implements Registry {
                 }
             }
         } catch (Throwable e) {
+            // 万一说刷盘的时候要是失败了，此时还可以执行重试刷盘的策略
             savePropertiesRetryTimes.incrementAndGet();
             if (savePropertiesRetryTimes.get() >= MAX_RETRY_TIMES_SAVE_PROPERTIES) {
                 logger.warn("Failed to save registry cache file after retrying " + MAX_RETRY_TIMES_SAVE_PROPERTIES + " times, cause: " + e.getMessage(), e);
@@ -224,10 +270,13 @@ public abstract class AbstractRegistry implements Registry {
         }
     }
 
+    // 如果一旦说启用了这个缓存机制，服务发现的数据，存储到本地磁盘去
+    // 服务实例后续如果说重启的话，这里就会从本地磁盘拿到你需要的缓存数据就可以了
     private void loadProperties() {
         if (file != null && file.exists()) {
             InputStream in = null;
             try {
+                // 直接搞一个file input stream
                 in = new FileInputStream(file);
                 properties.load(in);
                 if (logger.isInfoEnabled()) {
@@ -303,6 +352,7 @@ public abstract class AbstractRegistry implements Registry {
                 logger.info("Register: " + url);
             }
         }
+        // 在这里就是维护一个公共数据结构，已经注册过的url这里添加到一个数据结构里去
         registered.add(url);
     }
 
@@ -330,6 +380,12 @@ public abstract class AbstractRegistry implements Registry {
         if (logger.isInfoEnabled()) {
             logger.info("Subscribe: " + url);
         }
+
+        // 针对我们当前要订阅的这个url地址，应该来说就是我们要关注的那个服务接口
+        // 针对一个服务的订阅监听，可能会施加多个监听器
+        // 此时会把监听器，加入到这个set里面去
+        // 订阅和监听的时候，必须是要加一个监听器的，NotifyListener，这个并不是说我们的zk里面的监听器
+        // child listener，watcher
         Set<NotifyListener> listeners = subscribed.computeIfAbsent(url, n -> new ConcurrentHashSet<>());
         listeners.add(listener);
     }
@@ -385,6 +441,7 @@ public abstract class AbstractRegistry implements Registry {
             return;
         }
 
+        // 刚刚开始，他的subscribed订阅数据里应该是空的，for循环根本就不会执行了
         for (Map.Entry<URL, Set<NotifyListener>> entry : getSubscribed().entrySet()) {
             URL url = entry.getKey();
 
@@ -428,6 +485,7 @@ public abstract class AbstractRegistry implements Registry {
             logger.info("Notify urls for subscribe url " + url + ", url size: " + urls.size());
         }
         // keep every provider's category.
+        // map，key正常来说就是/dubbo/服务接口/providers，urls list
         Map<String, List<URL>> result = new HashMap<>();
         for (URL u : urls) {
             if (UrlUtils.isMatch(url, u)) {

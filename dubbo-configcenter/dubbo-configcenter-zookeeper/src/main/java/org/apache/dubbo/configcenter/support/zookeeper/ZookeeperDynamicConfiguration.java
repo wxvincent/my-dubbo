@@ -37,6 +37,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  *
+ * 作为一款成熟的框架，一个是自己要做的非常优秀，很好
+ * 你的很多特性，是支持跟主流的一些外部的框架，或者是系统可以进行无缝对接
+ * 这些事情，都是一个成熟的框架，必然要去做的
+ *
  */
 public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration {
 
@@ -49,22 +53,30 @@ public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration 
     private static final Long THREAD_KEEP_ALIVE_TIME = 0L;
 
     ZookeeperDynamicConfiguration(URL url, ZookeeperTransporter zookeeperTransporter) {
+        // url其实就是一个zk的连接地址
         super(url);
 
         this.cacheListener = new CacheListener(rootPath);
 
         final String threadName = this.getClass().getSimpleName();
+
+        // 构建一个他需要使用的线程池
         this.executor = new ThreadPoolExecutor(DEFAULT_ZK_EXECUTOR_THREADS_NUM, DEFAULT_ZK_EXECUTOR_THREADS_NUM,
             THREAD_KEEP_ALIVE_TIME, TimeUnit.MILLISECONDS,
             new LinkedBlockingQueue<>(DEFAULT_QUEUE),
             new NamedThreadFactory(threadName, true),
             new AbortPolicyWithReport(threadName, url));
 
+        // 基于ZooKeeperTransporter连接到了zk url去，拿到了一个ZookeeperClient
         zkClient = zookeeperTransporter.connect(url);
         boolean isConnected = zkClient.isConnected();
         if (!isConnected) {
             throw new IllegalStateException("Failed to connect with zookeeper, pls check if url " + url + " is correct.");
         }
+
+        // 我们可以想一下，我们会怎么去用他，你可以把一些配置写入到zk里去，也可以通过zk读取一些配置
+        // 类似于我们的mesh rule，他都用到了dynamic configuration，他会针对自己的router路由规则节点，施加监听
+        // 如果有路由规则有变化，就会推送回来，自己这里就能感知到了
     }
 
     /**
@@ -87,6 +99,7 @@ public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration 
 
     @Override
     protected boolean doPublishConfig(String pathKey, String content) throws Exception {
+        // 就是说是你要把一个配置项写入到zk里去，配置项你要自定义一个path
         zkClient.create(pathKey, content, false);
         return true;
     }
@@ -108,6 +121,7 @@ public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration 
 
     @Override
     protected String doGetConfig(String pathKey) throws Exception {
+        // 从zk里获取一个配置项
         return zkClient.getContent(pathKey);
     }
 
@@ -130,6 +144,7 @@ public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration 
 
     @Override
     protected void doAddListener(String pathKey, ConfigurationListener listener) {
+        // 针对指定的配置项，去加一个监听器
         cacheListener.addListener(pathKey, listener);
         zkClient.addDataListener(pathKey, cacheListener, executor);
     }

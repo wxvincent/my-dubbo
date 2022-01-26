@@ -90,6 +90,7 @@ public class Connection extends AbstractReferenceCounted {
     }
 
     private Bootstrap create() {
+        // 都是基于netty client去创建连接，进行网络通信
         final Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(NettyEventLoopFactory.NIO_EVENT_LOOP_GROUP.get())
                 .option(ChannelOption.SO_KEEPALIVE, true)

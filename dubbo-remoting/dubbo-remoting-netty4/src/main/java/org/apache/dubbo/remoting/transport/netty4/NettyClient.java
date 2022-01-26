@@ -96,8 +96,13 @@ public class NettyClient extends AbstractClient {
      */
     @Override
     protected void doOpen() throws Throwable {
+        // handler，一般来说是用来处理网络请求的
         final NettyClientHandler nettyClientHandler = new NettyClientHandler(getUrl(), this);
+
+        // 企业级netty编程示范
+        // 对于Netty Client，必须搞一个Bootstrap
         bootstrap = new Bootstrap();
+        // 设置你的group，以及一些网络通信参数
         bootstrap.group(EVENT_LOOP_GROUP.get())
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .option(ChannelOption.TCP_NODELAY, true)
@@ -106,6 +111,8 @@ public class NettyClient extends AbstractClient {
                 .channel(socketChannelClass());
 
         bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Math.max(DEFAULT_CONNECT_TIMEOUT, getConnectTimeout()));
+
+        // netty的编程，企业级做法
         bootstrap.handler(new ChannelInitializer<SocketChannel>() {
 
             @Override
@@ -144,11 +151,14 @@ public class NettyClient extends AbstractClient {
     @Override
     protected void doConnect() throws Throwable {
         long start = System.currentTimeMillis();
+        // 真正要对一个server端发起连接，netty的connect
+        // 发起一个网络连接，但是这个网络连接，并不是立刻就可以做好的
         ChannelFuture future = bootstrap.connect(getConnectAddress());
         try {
             boolean ret = future.awaitUninterruptibly(getConnectTimeout(), MILLISECONDS);
 
             if (ret && future.isSuccess()) {
+                // 如果连接成功了，此时可以通过future拿到一个channel，跟server端，provider服务实例建立好的网络连接
                 Channel newChannel = future.channel();
                 try {
                     // Close old channel

@@ -49,6 +49,7 @@ public class MethodConfig extends AbstractMethodConfig {
 
     /**
      * The method name
+     * 方法名称
      */
     private String name;
 
@@ -58,17 +59,17 @@ public class MethodConfig extends AbstractMethodConfig {
     private Integer stat;
 
     /**
-     * Whether to retry
+     * Whether to retry，方法是否支持重试
      */
     private Boolean retry;
 
     /**
-     * If it's reliable
+     * If it's reliable，方法是否是可靠的
      */
     private Boolean reliable;
 
     /**
-     * Thread limits for method invocations
+     * Thread limits for method invocations，对这个方法最多可以同时允许多少线程并发访问
      */
     private Integer executes;
 
@@ -78,7 +79,9 @@ public class MethodConfig extends AbstractMethodConfig {
     private Boolean deprecated;
 
     /**
-     * Whether to enable sticky
+     * Whether to enable sticky，对这个方法是否启用sticky机制，粘粘的意思
+     * sticky机制如果一旦说启用了，粘滞调用，尽可能的会让你的一个consumer端就针对你的一个指定的provider端的实例发起调用
+     * 把你的一个consumer端和你的一个provider端粘在一起
      */
     private Boolean sticky;
 

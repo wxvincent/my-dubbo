@@ -43,7 +43,7 @@ public class ModuleEnvironment extends Environment implements ModuleExt {
     private OrderedPropertiesConfiguration orderedPropertiesConfiguration;
 
     private CompositeConfiguration dynamicGlobalConfiguration;
-
+    // 支持外部的配置中心，支持从zk、nacos、apollo这种外部配置中心读写配置数据
     private DynamicConfiguration dynamicConfiguration;
 
     public ModuleEnvironment(ModuleModel moduleModel) {

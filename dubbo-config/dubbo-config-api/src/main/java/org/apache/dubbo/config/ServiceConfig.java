@@ -152,6 +152,37 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
     @Override
     protected void postProcessAfterScopeModelChanged(ScopeModel oldScopeModel, ScopeModel newScopeModel) {
         super.postProcessAfterScopeModelChanged(oldScopeModel, newScopeModel);
+
+        // 结合这个使用实例，去看一下对应的自适应获取extension实例的机制
+        // SPI机制，动态的获取对应的实现类以及实例对象
+
+        // 我们在看完了大量的dubbo源码之后，应该就是对dubbo源码有了一个比较深刻的认识
+        // 在dubbo源码里我们看到了大量的SPI机制的使用
+        // 很多地方对一些核心组件的接口实现类的获取/选择，实例对象的构建，都是用SPI机制来做的
+        // SPI机制，只要指定一个接口，他就会自动按照一个规则，在项目目录下面，指定目录里面，去查找这个接口对应的SPI配置文件
+        // 对这个SPI配置文件里面的内容做一个读取，就代表了这个接口对应的一些可以供选择的实现类
+        // 到底使用哪个或者哪些实现类，此时可以基于SPI机制的按name获取，adaptive自适应获取，activate自动激活批量获取
+        // 拿到对应的实现类之后，就直接对实现类构建他的一个实例，基于jdk的反射技术就可以做到了，clazz.newInstance()就可以做到了
+
+        // SPI机制，核心，扩展，我们可以任意的把dubbo里的核心组件，实现，替换成我们自己的实现
+        // 按照SPI机制配置的规则，在指定目录下配置指定接口的实现类，就可以了，实现类可以是我们自己的实现类
+        // 在dubbo框架运行的过程中，对核心组件都会基于接口进行SPI查找，必然会找到我们自己的实现，替换
+        // 整个dubbo框架，各种核心组件，其实都是跟实现，是松耦合的
+
+        // 如果说要是dubbo要是没设计这套SPI机制，也想实现一套核心组件可扩展和替换的机制
+        // 他可以设计一些配置项，他自己可以有一些配置文件，在配置文件里可以有类似于protocol.class=xx，你可以去做一个配置
+        // 他在源码里，对具体的Protocol接口的实现类的获取，可以基于配置文件去做一个读取，如果没配置，就有一个默认的类
+        // 也能实现你的框架的核心组件的高度可扩展，留出对应的配置项，你想替换和扩展哪个核心组件，就去进行配置
+
+        // 那么dubbo SPI机制，到底设计他、使用他、优点到底在哪里？
+        // 仅仅使用配置文件和配置项来做，此时是很死板的，你的protocol.class只能配置一个类，如果你希望的是可以有多个实现类
+        // 在运行过程中根据上下文环境里不同的参数或者属性，来动态的选择具体的实现类
+        // 如果你一次性要能够拿到多个实现类，但是要有选择性的拿到多个实现类，protocol.class=xx,xx,xx，三个类，但是你一次性就希望获取到里面的2个实现类
+
+        // 综上所述，dubbo如果想要实现一套特别好的动态扩展机制，必然要引入SPI机制
+        // 按name获取实现类、adaptive动态自适应机制、activate批量激活机制，可以帮助dubbo应对各种各样的扩展场景
+
+        // 这里拿到的是一个adaptive自适应的Protocol接口，代理
         protocolSPI = this.getExtensionLoader(Protocol.class).getAdaptiveExtension();
         proxyFactory = this.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
     }
@@ -197,11 +228,16 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
      * for early init serviceMetadata
      */
     public void init() {
+        // 在一个中间件里面，会大量的运用到juc的技术，java并发
         if (this.initialized.compareAndSet(false, true)) {
             // load ServiceListeners from extension
             ExtensionLoader<ServiceListener> extensionLoader = this.getExtensionLoader(ServiceListener.class);
             this.serviceListeners.addAll(extensionLoader.getSupportedExtensionInstances());
         }
+        // 初始化你的service metadata，服务元数据
+        // metadata center，元数据中心，配合起来来看他
+        // service metadata，服务实例的元数据，也就是说对服务实例做一个描述的元数据
+        // 最最核心的，就是service他的对应接口，实现类到底是哪个类
         initServiceMetadata(provider);
         serviceMetadata.setServiceType(getInterfaceClass());
         serviceMetadata.setTarget(getRef());
@@ -277,6 +313,8 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         checkProtocol();
 
         // init some null configuration.
+        // 他这里有一个SPI机制的使用，是去使用了activate自动激活的机制
+        // 在整个阅读dubbo源码细节的过程之中，我们看到了SPI的使用，adaptive自适应都可以去仔细看一下SPI的细节
         List<ConfigInitializer> configInitializers = this.getExtensionLoader(ConfigInitializer.class)
                 .getActivateExtension(URL.valueOf("configInitializer://", getScopeModel()), (String[]) null);
         configInitializers.forEach(e -> e.initServiceConfig(this));
@@ -290,6 +328,8 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
             throw new IllegalStateException("<dubbo:service interface=\"\" /> interface not allow null!");
         }
 
+        // ref就是我们自己的实现类
+        // 下面的逻辑里，都会根据你的接口名称，去获取到对应的一些接口class
         if (ref instanceof GenericService) {
             interfaceClass = GenericService.class;
             if (StringUtils.isEmpty(generic)) {
@@ -359,23 +399,56 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         if (StringUtils.isEmpty(path)) {
             path = interfaceName;
         }
+         // 发布服务
         doExportUrls();
+         // 服务已经发布完成了
         exported();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
+        // 在这里分析一下这块源码，ScopeModel，真实的类型叫做ModuleModel
+        // getScopeModel()，再去获取service repository，以及之前也获取过其他的组件
+        // dubbo这里，把他的各个组件，都集中在了ScopeModel=ModuleModel，ScopeModel就类似于设计模式里的门面模式
+        // ScopeModel、ModuleModel、ApplicationModel、FrameworkModel，多个Model组成一个体系，里面会包含一些组件
+
+
+        // Repository存储组件设计的思想
+        // module自己本身是没什么用的，facade，背后封装了一系列的组件，方便我们在代码运作过程中以
+        // 标准化、便捷化的方式去获取各种组件来使用
+
+        // 分成几种不同类别的Repository，ServiceRepository，顾名思义，放的都是一些服务相关的数据
+        // 在dubbo框架里，对各种不同门类的数据，服务数据，配置数据，线程池，公共数据存取点，运行过程中，随时可能要存取各种公共数据
+        // 此时必然就需要有一些存取公共数据的组件，存储+读取/使用，存储是核心含义，设计了一系列的Repository组件思想
+        // 不同的Repository组件就去放不同的数据，那么再运行过程中，就可以随时随地对你需要的公共数据进行一个存储和读取，只要获取那个数据对应的Repository组件了
+
+        // 如果说你要是没有这种存储组件的话，很可能大量的人在协同开发的时候，会出一个问题
+        // 可能不同的人把同一种数据在进行存储和读取的时候，可能会通过各种各样混乱的不同的方式来进行
+        // 会把你的dubbo代码，写的极为的混乱
+
+        // 服务实例数据
+        // 设计一个ServiceRepository，可能会把一些服务实例数据拿出来以后，就不去用这个ServiceRepository
+        // ServiceManager组件，自己把自己需要的数据，都放在manager组件里面
+
+
+        // ServiceRepository又是什么东西
+        // ServiceRepository，核心本质是dubbo服务数据存储组件
+        // 一个系统其实是可以发布多个dubbo服务，每个dubbo服务的本质和核心就是一个interface和一个实现类
         ModuleServiceRepository repository = getScopeModel().getServiceRepository();
+        // 把当前要发布的服务注册到了dubbo服务数据存储组件里去了，repository
         ServiceDescriptor serviceDescriptor = repository.registerService(getInterfaceClass());
+
+        // 服务提供者，你是暴露服务出去的，provider，通过所有的信息，封装了一个ProviderModel
         providerModel = new ProviderModel(getUniqueServiceName(),
             ref,
             serviceDescriptor,
             this,
             getScopeModel(),
             serviceMetadata);
-
+        // 又可以基于Repository组件把provider数据注册进去
         repository.registerProvider(providerModel);
 
+        // 生成的注册URL，本身是2181的端口号，是针对zk进行注册的
         List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
 
         for (ProtocolConfig protocolConfig : protocols) {
@@ -562,11 +635,15 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
             // export to local if the config is not remote (export to remote only when config is remote)
             if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+                // 必须先进行本地的发布
                 exportLocal(url);
             }
 
             // export to remote if the config is not local (export to local only when config is local)
             if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
+                // 他会先去进行远程发布，在zk里进行注册，还有做一个网络发布，这两个事情做完了，provider服务实例就完成了启动了
+                // 就需要把这个服务实例，元数据，推送到元数据中心里去
+                // 动态配置中心，如果你有需要，可以从里面去获取参数，如果监听配置项的变更，可以去加监听器
                 url = exportRemote(url, registryURLs);
                 if (!isGeneric(generic) && !isMetadataService(interfaceName)) {
                     ServiceDescriptor descriptor = getScopeModel().getServiceRepository().getService(interfaceName);
@@ -579,8 +656,14 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         this.urls.add(url);
     }
 
+    // 需要确保说，你的服务可以对外提供访问
     private URL exportRemote(URL url, List<URL> registryURLs) {
         if (CollectionUtils.isNotEmpty(registryURLs)) {
+
+            // 会发现在dubbo里有一个很关键的一个东西，URL，这个URL里我们发现有很多的信息在里面
+            // 协议、各种各样的参数、各种各样的信息，url就可以给后续的代码的运行提供很多需要的东西在里面
+            // 为什么要有URL这样的一个东西呢？承载一些配置和信息
+            // 在代码运转的过程中，consumer和Provider进行交互的过程中
             for (URL registryURL : registryURLs) {
                 if (SERVICE_REGISTRY_PROTOCOL.equals(registryURL.getProtocol())) {
                     url = url.addParameterIfAbsent(SERVICE_NAME_MAPPING_KEY, "true");
@@ -629,11 +712,128 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrl(URL url, boolean withMetaData) {
+
+        // ProxyFactory，Proxy，动态代理
+        // ref，实现类
+        // interfaceClass，接口
+        // url服务实例对外暴露出去的一些核心信息
+        // Invoker调用组件，当dubbo的netty server对外网络监听到连接，处理请求，必须要对请求有一个调用组件，可以去调
+        // ProxyFactory基于我们的DemoService接口生成的动态代理，被调用接口的时候，底层会回调你自己写的实现类，DemoServiceImpl
+
+        // 动态代理技术有很多种，cglib，jdk，动态代理技术如果不了解的话，可以自己去看一下
+        // 面向一个接口，动态生成接口的一个实现类 ，对这个实现类动态生成对应的对象，动态代理的对象
+        // 对象必然会代理自己背后的一个实现类
+        // 当这个对象被调用的时候，背后的实现类其实就是会被调用
+
+        // 默认情况下，封装一个proxyinvoker，就是代理invoker，后续针对本地实现类代理了他，对实现类进行调用
+        // 用javassist技术生成wrapper，proxyinvoker调用，底层就是基于javassist wrapper在进行调用
+        // proxy invoker，代理invoker，负责转发对目标实现类的调用
+        // jdk，都是封装一个invoker，invoker代理了对目标实现类的一个方法调用，javassist用他的技术去做调用，jdk就是反射技术去做调用
+
+        // proxy代理，我们要把一个服务发布出去，是用来给别人来进行调用的
+        // 接口和实现类，接口定义好了我发布出去的服务，到底是别人有哪些方法可以来调用，接口是做了一个严格的定义
+        // 必须去调用接口的实现类，实现类里就写了各种方法的实现逻辑，可能是针对mysql的crud
+
+        // 如果我们要是直接把我们的接口和方法暴露出去，给网络通信的组件来进行调用，他们中间会缺少了一个层次
+        // 代理层
+        // 网络通信组件这块，他在收到一个rpc请求之后，必然会去完成这个rpc请求，针对哪个接口、调用哪个方法、传入进去的各个参数的值
+        // 难不成让我们的网络通信组件，直接耦合我们的自定义的接口和实现类吗？
+        // 难不成说让我们你在网络通信组件里，去通过类似于javassist技术，或者说是jdk反射技术，去调用我们的一个实现类的方法呢？
+        // 通用的网络通信组件代码，直接就跟我们自己写的业务代码，耦合在一起，会导致很严重的代码污染的
+
+        // 我们肯定是要把网络通信这一层要跟我们自己实现的业务代码要做解耦和隔离
+        // 隔离网络通信层和我们的实现类这一层，最重要的是什么呢，就是我们的代理层，proxy层
+        // 代理，代理，让这一层代理我们的自己实现的实现类
+        // 我们的网络通信组件，可以去调用我们的比较通用的代理层的组件就可以了，dubbo框架里面
+        // 让代理层，再去代理调用，反过来去调用我们的实现类的方法就可以了
+
+        // 必然要针对实现类去创建和获取一层代理
+        // AbstractProxyInvoker，创建一个抽象类的匿名内部子类的实例对象，在里面封装对我们的目标实现类的调用
+        // 通过这一个proxy代理层，就可以完美的把我们的业务代码和通用的框架代码，都是隔离开来的
+
+
+        // dubbo里面，invoker组件设计特别的精准和漂亮
+        // 跟dubbo学习一下源码设计的技巧和思想，invoker，大的概念，调用组件，要对服务进行调用的时候
+        // 一般来说就得通过invoker来进行
+        // invoker又分为了很多种，AbstractProxyInvoker，代理invoker，代理了一个目标对象，针对目标对象，可以进行代理的访问
+        // 这个proxy invoker代理了对目标对象的访问
+        // cluster invoker -> mock cluster invoker、failover cluster invoker
+        // dubbo invoker
+        // invoke，调用，invoker，调用者，调用组件，invoker就是代表了对一个什么什么东西的调用的语义在里面
+        // 只不过说在执行这个调用的过程中，到了你这个invoker的时候，可能会干一些跟你的语音匹配的一些功能在里面
+        // proxy invoker：javassist技术、jdk反射对目标类方法的调用
+        // mock cluster invoker：mock降级；failover cluster invoker：故障转移invoker
+        // dubbo invoker：基于netty去发起rpc请求
+
+        // rpc请求里，rpc调用，remote procedure call，远程过程调用，call
+        // invoker组件，rpc调用的过程中，会有很多的调用步骤和过程，拆分成很多的环节，针对不同的环节，都可以有对应的invoke
+        // 不同的invoker实现类负责的就是rpc调用过程中某个步骤和环节
+
+        // 深刻体会和理解invoker组件设计思想
+        // rpc调用过程会包含很多的步骤和环节，mock降级、集群容错、网络调用、代理调用
+        // 针对rpc调用设计出一个invoker组件，不同的实现类就代表了不同的步骤，多个步骤串联起来运行，完成一次完整的rpc调用
+        // proxy invoker，代表了一个针对目标实现类的代理，通过这个代理去调用，也是rpc调用过程里的一个环节，ProxyInvoker
+
         Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
         if (withMetaData) {
             invoker = new DelegateProviderMetaDataInvoker(invoker, this);
         }
+
+        // 进行服务发布他的主要源码，其实都是在Protocol里面
+        // 直接调试打进去源码不太好看，但是这种时候往往我们自己要动脑子来进行分析
+        // 第一次进行本地发布的时候，看一下Exporter是什么类型的；第二次远程发布也可以看一下
+
+        // 初步的看了一下DubboProtocol，但是当时单单就是看DubboProtocol，感觉看的很迷茫，一堆组件，乱七八糟的运行
+        // RegistryProtocol，里面还封装了一个DubboProtocol，RegistryProtocol先执行，先去做服务注册的事情，接着再执行DubboProtocol，启动NettyServer作为网络服务器
+
+
+        // Protocol组件，设计思想是什么呢？
+        // 为什么要有protocol组件，如果没有他，那么此时代码写到这里会如何呢？
+        // 服务发布而言，把你的服务注册到注册中心里去，zk；把你的服务进行网络发布，让别人通过网络可以发送请求来调用你
+        // protocol这个东西的话，此时大不了你就是自己写两个类组件，包括调用两个类组件去完成两个动作
+        // Registry接口 -> ZooKeeperRegistry/NacosRegistry/EurekaRegistry，就直接去完成服务注册就可以了
+        // 你可以直接基于网络服务器的模型去构建网络服务器就可以了，把你的proxy invoker的调用，封装在netty handler里面就可以了
+
+        // 可能会存在这样的一个问题
+        // 大型、复杂、多人协作开发过程中的协议和标准的定义问题，注册、发布，这些动作，在dubbo框架运行过程中
+        // 可能会在很多不同的地方都可能会有，本地发布（流程）、远程发布（流程）
+        // 在各种地方，可能都是不同的人在写这块代码，此时可能代码会你写你的，我写我的，标准化的发布以及调用等动作，可能大家都会用各种不同的方式来实现
+        // 导致代码的混乱
+
+        // Protocol是一个组件，接口，在里面核心的方法和动作就两个：export、refer
+        // export就是发布一个服务，refer就是引用一个服务用于调用
+        // 把他定义在一个Protocol协议层组件里，核心的协议动作就是这两个，我们在各种地方和场景里，如果要执行两个标准化的动作
+        // 直接就应该是基于protocol协议组件，标准的动作去执行
+
+        // protocolSPI，接口，实现一看就是必然会通过SPI机制加载出来
+        // RegistryProtocol、DubboProtocol
+        // 设计两个Protocol实现类组件，protocol核心语义就是两个，服务发布，服务引用
+        // 如果说我们直接就设计一个DefaultProtocol，服务发布的时候，直接在里面就把服务注册和网络发布都干了
+        // 服务引用，就直接把服务发现和订阅，网络连接初始化，把这些事儿给他都干了
+
+        // 耦合和解耦，注册中心的交互、网络发布和连接，完全不大相关的，独立的两个模块
+        // 耦合在一起，DefaultProtocol里面，代码耦合太严重了，未来如果要做一些代码扩展，比如说针对网络连接和发布，或者是注册中心做一些代码维护和替换
+        // 可能就直接会影响和污染其他的代码
+        // 就我个人而言，我还是比较支持，把服务发布和引用两个语义 里，把注册中心和网络连接，解耦
+        // RegistryProtocol，顾名思义，包含的主要是注册中心相关的交互逻辑，export，在注册中心里实行注册，refer，从注册中心里拉取服务地址列表以及订阅
+        // DubboProtocol，基于dubbo协议，去完成一个网络服务器发布和网络连接，关注的网络这一块
+        // 设计思想，就是把注册中心和网络连接，这两块逻辑做了一个强解耦，拆到不同的protocol组件里面去
+
+        // 探讨：dubbo源码，我是极为极为的赞赏的
+        // RegistryProtocol和DubboProtocol，设计，我是持有异议，赞成他的解耦的思想
+        // 不是太赞成RegistryProtocol作为一个入口，让他再去调用DubboProtocol，调用逻辑，代码调用逻辑关系也比较粗糙一些
+        // 如果说假设这块代码让我来设计和实现的话，protocol，default、dubbo、registry
+        // 默认先拿到一个DefaultProtocol.export，基于SPI机制的getDefaultExtension
+        // SPI机制的自动激活，activate，直接拿到自动激活的dubbo和registry两个protocol，应该可以有一个依次调用的过程和逻辑
+        // List<Protocol> protocols = getModel().getExtensionLoader(Protocol.class).getActivateExtesion();
+        // for(Protocol protocol : protocols) {
+        //   protocol.export(invoker);
+        // }
+
         Exporter<?> exporter = protocolSPI.export(invoker);
+        // 这块我们通过看Protocol的接口，就可以理解Protocol对invoker再干什么
+        // 把invoker搞出去，搞成一个exporter
+        // 后续有请求过来，通过protocol可以拿到一个invoker
         exporters.add(exporter);
     }
 
@@ -650,6 +850,9 @@ public class ServiceConfig<T> extends ServiceConfigBase<T> {
         local = local.setScopeModel(getScopeModel())
             .setServiceModel(providerModel);
         doExportUrl(local, false);
+        // exportLocal，是什么意思？
+        // 发布到本地，也就是系统自己内部，叫做本地，jvm内部做一次export发布就可以了
+        // 在jvm内部完成了组件之间的一些交互关系和发布
         logger.info("Export dubbo service " + interfaceClass.getName() + " to local registry url : " + local);
     }
 

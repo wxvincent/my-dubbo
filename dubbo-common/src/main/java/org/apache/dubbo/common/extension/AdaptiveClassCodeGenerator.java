@@ -104,6 +104,7 @@ public class AdaptiveClassCodeGenerator {
             throw new IllegalStateException("No adaptive method exist on extension " + type.getName() + ", refuse to create the adaptive class!");
         }
 
+        // 动态拼接类代码的字符串
         StringBuilder code = new StringBuilder();
         code.append(generatePackageInfo());
         code.append(generateImports());

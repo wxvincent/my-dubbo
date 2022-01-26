@@ -95,6 +95,8 @@ public class AccessLogFilter implements Filter {
      */
     @Override
     public Result invoke(Invoker<?> invoker, Invocation inv) throws RpcException {
+        // filter都是支持invoke接口的，下一个invoker，rpc调用
+
         if (scheduled.compareAndSet(false, true)) {
             inv.getModuleModel().getApplicationModel().getApplicationExecutorRepository().getSharedScheduledExecutor()
                 .scheduleWithFixedDelay(this::writeLogToFile, LOG_OUTPUT_INTERVAL, LOG_OUTPUT_INTERVAL, TimeUnit.MILLISECONDS);
@@ -102,13 +104,17 @@ public class AccessLogFilter implements Filter {
         try {
             String accessLogKey = invoker.getUrl().getParameter(ACCESS_LOG_KEY);
             if (ConfigUtils.isNotEmpty(accessLogKey)) {
-                AccessLogData logData = AccessLogData.newLogData(); 
+                AccessLogData logData = AccessLogData.newLogData();
                 logData.buildAccessLogData(invoker, inv);
                 log(accessLogKey, logData);
             }
         } catch (Throwable t) {
             logger.warn("Exception in AccessLogFilter of service(" + invoker + " -> " + inv + ")", t);
         }
+
+        // filter chain，写完了日志之后，就会调用下一个invoker
+        // 责任链设计模式，构建了一条责任链，链条
+
         return invoker.invoke(inv);
     }
 
@@ -145,6 +151,8 @@ public class AccessLogFilter implements Filter {
     }
 
     private void writeLogToFile() {
+        // 核心人物，就是把日志写到磁盘文件里去
+        // logEntries就是你存储的日志条目
         if (!logEntries.isEmpty()) {
             for (Map.Entry<String, Set<AccessLogData>> entry : logEntries.entrySet()) {
                 String accessLog = entry.getKey();

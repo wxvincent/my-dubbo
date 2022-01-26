@@ -25,7 +25,7 @@ import org.apache.dubbo.rpc.cluster.router.state.StateRouterFactory;
  * Application level router factory
  * AppRouter should after ServiceRouter
  */
-@Activate(order = 150)
+@Activate(order = 150) // SPI机制，自动激活一块，通过这个实例，可以看的非常的清晰
 public class AppStateRouterFactory implements StateRouterFactory {
     public static final String NAME = "app";
 

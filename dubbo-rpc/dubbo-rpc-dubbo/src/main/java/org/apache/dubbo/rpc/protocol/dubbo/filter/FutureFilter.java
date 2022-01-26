@@ -45,6 +45,7 @@ public class FutureFilter implements ClusterFilter, ClusterFilter.Listener {
 
     @Override
     public Result invoke(final Invoker<?> invoker, final Invocation invocation) throws RpcException {
+     // 触发invoker调用的回调
         fireInvokeCallback(invoker, invocation);
         // need to configure if there's return value before the invocation in order to help invoker to judge if it's
         // necessary to return future.
@@ -66,6 +67,7 @@ public class FutureFilter implements ClusterFilter, ClusterFilter.Listener {
     }
 
     private void fireInvokeCallback(final Invoker<?> invoker, final Invocation invocation) {
+        // 这个方法
         final AsyncMethodInfo asyncMethodInfo = getAsyncMethodInfo(invoker, invocation);
         if (asyncMethodInfo == null) {
             return;
@@ -85,6 +87,7 @@ public class FutureFilter implements ClusterFilter, ClusterFilter.Listener {
 
         Object[] params = invocation.getArguments();
         try {
+            // 在这里他会通过反射，直接执行你的onInvokeMethod
             onInvokeMethod.invoke(onInvokeInst, params);
         } catch (InvocationTargetException e) {
             fireThrowCallback(invoker, invocation, e.getTargetException());
@@ -140,6 +143,7 @@ public class FutureFilter implements ClusterFilter, ClusterFilter.Listener {
     }
 
     private void fireThrowCallback(final Invoker<?> invoker, final Invocation invocation, final Throwable exception) {
+        // 如果能够获取到异步方法信息，此时才会往下走，如果获取到的是null
         final AsyncMethodInfo asyncMethodInfo = getAsyncMethodInfo(invoker, invocation);
         if (asyncMethodInfo == null) {
             return;

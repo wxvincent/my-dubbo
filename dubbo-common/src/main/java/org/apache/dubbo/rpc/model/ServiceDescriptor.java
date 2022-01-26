@@ -37,9 +37,12 @@ import java.util.concurrent.ConcurrentSkipListMap;
  * ServiceModel and ServiceMetadata are to some extend duplicated with each other. We should merge them in the future.
  */
 public class ServiceDescriptor {
+    // 服务名称
     private final String serviceName;
+    // 你的服务对外发布初步的接口class类型
     private final Class<?> serviceInterfaceClass;
     // to accelerate search
+    // 你的服务对外发布出去的一些接口里的method，方法
     private final Map<String, List<MethodDescriptor>> methods = new HashMap<>();
     private final Map<String, Map<String, MethodDescriptor>> descToMethods = new HashMap<>();
     private ConcurrentNavigableMap<String, FullServiceDefinition> serviceDefinitions = new ConcurrentSkipListMap<>();

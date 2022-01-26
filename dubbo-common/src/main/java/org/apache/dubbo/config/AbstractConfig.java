@@ -108,6 +108,9 @@ public abstract class AbstractConfig implements Serializable {
      */
     protected ScopeModel scopeModel;
 
+    // 我们在一些源码里，可以发现说，他这个model是一个组件体系，ScopeModel是一个基础
+    // ScopeModel类型是可以转换为ModuleModel、ApplicationModel
+
     public AbstractConfig() {
         this(ApplicationModel.defaultModel());
     }
@@ -565,12 +568,18 @@ public abstract class AbstractConfig implements Serializable {
         refreshed.set(true);
         try {
             // check and init before do refresh
+            // 在这个里面，比较关键的一个初始化的操作，就是给了一个ProviderConfig
+            // provider服务实例对应的一些信息都是在里面的
             preProcessRefresh();
 
+            // model组件体系对整个dubbo源码的运行很关键的
+            // SPI机制使用的入口，repository，environment，bean factory，等等，很多通用的组件
+            // 在这里，核心就是去拿到你的一些配置信息
             Environment environment = getScopeModel().getModelEnvironment();
             List<Map<String, String>> configurationMaps = environment.getConfigurationMaps();
 
             // Search props starts with PREFIX in order
+            // Search props starts with PREFIX in order，这种代码，其实都不是太紧要
             String preferredPrefix = null;
             for (String prefix : getPrefixes()) {
                 if (ConfigurationUtils.hasSubProperties(configurationMaps, prefix)) {
@@ -582,6 +591,8 @@ public abstract class AbstractConfig implements Serializable {
                 preferredPrefix = getPrefixes().get(0);
             }
             // Extract sub props (which key was starts with preferredPrefix)
+
+            // Extract sub props (which key was starts with preferredPrefix) 这种代码，也都不是太紧要，配置信息的处理
             Collection<Map<String, String>> instanceConfigMaps = environment.getConfigurationMaps(this, preferredPrefix);
             Map<String, String> subProperties = ConfigurationUtils.getSubProperties(instanceConfigMaps, preferredPrefix);
             InmemoryConfiguration subPropsConfiguration = new InmemoryConfiguration(subProperties);
@@ -601,9 +612,19 @@ public abstract class AbstractConfig implements Serializable {
                     "], extracted props: " + subProperties);
             }
 
+            // 很明显，看起来，就是在进行一些配置信息之类的东西，使用反射做一个注入，注入给我们需要的方法
             assignProperties(this, environment, subProperties, subPropsConfiguration);
 
-            // process extra refresh of subclass, e.g. refresh method configs
+            // process extra refresh of sub class, e.g. refresh method configs
+
+            // 大家看源码的时候，脑子一定要高度紧张
+            // 上面这段源码到底是他的核心任务是处理什么，preferredPrefix是关键
+            // dubbo.service.org.apache.dubbo.demo.DemoService
+            // dubbo.service代表dubbo的一个服务名称的一个固定的前缀，固定拼接的
+            // 中间的org.apache.dubbo.demo，其实是从你的包名里截取出来的，最后加上服务接口的接口名
+            // 很可能，是把这串东西，作为当前这个dubbo服务的全限定的名字
+            // 这段refresh的代码，核心的用意就在于处理出来这个preferredPrefix，其他的配置信息也会一并做一些处理
+
             processExtraRefresh(preferredPrefix, subPropsConfiguration);
 
         } catch (Exception e) {

@@ -65,6 +65,8 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
         channels.remove(ctx.channel());
     }
 
+    // 不同的网络协议，最核心的不同点，编码和解码，在网络里传输的其实都是字节流
+    // 如何把数据变成字节流，以及如何把字节流转换为数据
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
         // Will use the first five bytes to detect a protocol.
@@ -72,6 +74,7 @@ public class PortUnificationServerHandler extends ByteToMessageDecoder {
             return;
         }
 
+        // 就跟我们之前讲的，完全对上了，在数据交换和通信的时候，在这里是基于最新的triple https协议来进行数据交换
         for (final WireProtocol protocol : protocols) {
             in.markReaderIndex();
             final ProtocolDetector.Result result = protocol.detector().detect(ctx, in);

@@ -56,12 +56,18 @@ import static org.apache.dubbo.remoting.Constants.BIND_IP_KEY;
 import static org.apache.dubbo.remoting.Constants.BIND_PORT_KEY;
 import static org.apache.dubbo.rpc.Constants.INTERFACES;
 
+/**
+ * 这个dubbo里的服务实例的元数据
+ */
 public class MetadataInfo implements Serializable {
     public static final MetadataInfo EMPTY = new MetadataInfo();
     private static final Logger logger = LoggerFactory.getLogger(MetadataInfo.class);
 
+    // app
     private String app;
+    // revision，版本号
     private String revision;
+    // map里存放了多个服务实例的ServiceInfo
     private Map<String, ServiceInfo> services;
 
     private volatile AtomicBoolean initiated = new AtomicBoolean(false);
@@ -345,10 +351,11 @@ public class MetadataInfo implements Serializable {
     }
 
     public static class ServiceInfo implements Serializable {
-        private String name;
-        private String group;
-        private String version;
-        private String protocol;
+
+        private String name;        // 服务名称
+        private String group;       // 服务分组
+        private String version;     // 服务版本
+        private String protocol;    // 服务协议
         private String path; // most of the time, path is the same with the interface name.
         private Map<String, String> params;
 

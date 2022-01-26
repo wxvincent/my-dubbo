@@ -156,8 +156,12 @@ public class AsyncRpcResult implements Result {
 
     public Result getAppResponse() {
         try {
+            // 做了一个判断，CompletableFuture做了一个判断，isDone，如果说已经完成了拿到了响应
+            // 请求发送出去了以后，那么必然说你的服务端那里会收到一个请求，收到了请求之后，他必然会返回一个响应
+            // 然后如果说返回了响应之后，必然会被你的netty客户端收到，肯定会对你的响应做一个处理
+            // 响应结果，就会被放到你的future里面去，放你具体对应的结果就可以了，Response放到里面去
             if (responseFuture.isDone()) {
-                return responseFuture.get();
+                return responseFuture.get(); // 把你的Response返回回去就可以了
             }
         } catch (Exception e) {
             // This should not happen in normal request process;
@@ -165,6 +169,7 @@ public class AsyncRpcResult implements Result {
             throw new RpcException(e);
         }
 
+        // 就会基于rpc调用创建一个默认的值
         return createDefaultValue(invocation);
     }
 
@@ -198,6 +203,9 @@ public class AsyncRpcResult implements Result {
     @Override
     public Object recreate() throws Throwable {
         RpcInvocation rpcInvocation = (RpcInvocation) invocation;
+
+        // 第一个模式，invoke mode，future，要支持异步化的，返回的其实就是一个future对象
+        // 这个future的异步对象，代表的就是一个异步化的结果，此时可能有，也可能没有，需要你自己去获取这样子
         if (InvokeMode.FUTURE == rpcInvocation.getInvokeMode()) {
             return RpcContext.getClientAttachment().getFuture();
         }
